@@ -1,0 +1,1495 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+clfont — Claude Desktop 中文字体补丁工具（macOS, Apple Silicon）v4
+
+让 Claude Desktop 聊天内容里的中文用系统宋体（Songti SC）渲染，
+拉丁字符（anthropic-serif）与代码块（等宽）不受影响。
+
+子命令：
+  clfont install     打补丁（幂等、事务式，失败/中断自动回滚，含启动冒烟测试）
+  clfont uninstall   完全还原
+  clfont status      显示当前状态
+  clfont doctor      环境自检（含上次中断事务的诊断）
+
+事故复盘后的关键设计（v2 加流程安全，v3 修注入本身）：
+  1. 事务式回滚：每个改动入栈，任何异常（含 Ctrl+C / SIGTERM）逆序撤销，
+     收尾一律 codesign 重签 + 验证——不假设「改回去就不用签」。
+  2. install 前先把自身复制到 ~/.local/bin/clfont，复制失败则拒绝执行。
+  3. 全程写日志 + 事务日志 journal.json（SIGKILL 级崩溃也有验尸材料），
+     doctor/uninstall 据此诊断修复。
+  4. 【v3 新增】启动冒烟测试：打完补丁重签后自动启动 app，验证进程能存活；
+     不存活即判补丁有害并回滚。事务 commit 的定义 = 「app 能活着起来」，
+     不再是「文件操作完成」。这是补第二轮事故（文件全绿但主进程静默退出）的盲区。
+
+机制说明（v4：renderer 层注入 + asar 原地重打包）：
+  注入点：只改 preload 文件 .vite/build/mainView.js（webPreferences.preload
+  指向、运行于 renderer 隔离世界、能触达远程聊天 DOM、不含任何主进程 API），
+  尾部追加一段自包含、全程 try/catch 的 IIFE，把字体 CSS 作为 <style> 注入
+  远程 claude.ai 页面。第二轮事故是因为改了主进程（导致静默退出 exit 0）：
+  package.json 的 main = .vite/build/index.pre.js（名字有迷惑性，实为主进程
+  入口）及其 require 的 index*.chunk-*.js 一律不碰。
+
+  上线方式：Claude 启用了 Electron fuse OnlyLoadAppFromAsar +
+  EnableEmbeddedAsarIntegrityValidation（npx @electron/fuses read 可查），
+  所以 spec 里「改名 app.asar，Electron 自动改用解包出的 app/ 目录」这条老路
+  已失效（app 启动即 exit=1，零输出）。v4 改为原地重打包 app.asar，并把新的
+  header SHA256 同步写入 Info.plist 的 ElectronAsarIntegrity，最后重签。
+  打包器经往返测试：原样重打与官方 asar 逐字节一致。
+
+  字体切换靠改 CDS 变量 --font-anthropic-serif/--font-anthropic-sans
+  （变量名来自本地 bundle，非 CDP 探测——生产版禁用了远程调试端口）+
+  @font-face 的 unicode-range 只覆盖 CJK，故拉丁不受影响。
+  全程纯 Python，不依赖 node/npx，断网可用。
+
+测试钩子（仅供自动化测试）：
+  --app PATH / CLFONT_APP        操作指定的 .app 副本而非 /Applications/Claude.app
+  CLFONT_DATA_DIR                覆盖数据目录（备份/日志/journal）
+  CLFONT_SMOKE_USER_DATA_DIR     冒烟测试启动 app 时用的独立 user-data-dir
+                                 （测试副本用，避免撞正式 Claude 的 single-instance 锁）
+  CLFONT_SMOKE_FORCE_FAIL=1      强制冒烟测试判失败（用于验证 install 的回滚门）
+  CLFONT_CRASH_AT=<tag>[:int]    在指定步骤自杀（SIGKILL）或抛 KeyboardInterrupt(:int)
+                                 tag ∈ after-backup after-extract after-patch
+                                       after-move after-rename before-resign before-smoke
+"""
+
+import argparse
+import base64
+import hashlib
+import json
+import os
+import plistlib
+import re
+import shutil
+import signal
+import struct
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+# ---------------------------------------------------------------- 路径
+
+APP = RES = ASAR = ASAR_BAK = APP_DIR = UNPACKED = INFO_PLIST = BINARY = None
+
+
+def set_app(path):
+    global APP, RES, ASAR, ASAR_BAK, APP_DIR, UNPACKED, INFO_PLIST, BINARY
+    APP = Path(path)
+    RES = APP / "Contents/Resources"
+    ASAR = RES / "app.asar"
+    ASAR_BAK = RES / "app.asar.bak"
+    APP_DIR = RES / "app"
+    UNPACKED = RES / "app.asar.unpacked"
+    INFO_PLIST = APP / "Contents/Info.plist"
+    BINARY = APP / "Contents/MacOS/Claude"
+
+
+set_app(os.environ.get("CLFONT_APP", "/Applications/Claude.app"))
+
+DATA_DIR = Path(os.environ.get("CLFONT_DATA_DIR",
+                               str(Path.home() / ".local/share/clfont")))
+LOG_DIR = DATA_DIR / "logs"
+JOURNAL = DATA_DIR / "journal.json"
+CONFIG_PATH = Path.home() / ".config/clfont/config.json"
+CANON = Path.home() / ".local/bin/clfont"
+
+MARKER = "clfont-v1"
+UNICODE_RANGE = ("U+2E80-2EFF, U+3000-303F, U+3400-4DBF, "
+                 "U+4E00-9FFF, U+F900-FAFF, U+FF00-FFEF")
+UNICODE_RANGE_CJK = UNICODE_RANGE
+
+# 英文只覆盖基本拉丁（U+0020-007E）。**刻意不含拉丁文补充区 U+00A0-00FF 和
+# 私用区**：Claude 界面上的图标就是 anthropic 字体里的字形，实测把 font-family
+# 整个换掉时它们显示成 É（U+00C9，落在补充区）和 □，说明图标很可能就藏在那些
+# 码位上。少覆盖一点，换来图标不会碎。
+UNICODE_RANGE_LATIN = "U+0020-007E"
+KEEP_BACKUPS = 2
+
+DEFAULT_CONFIG = {
+    "scope": "cjk",           # cjk | latin | both —— 替换哪种文字
+    "font": "Songti SC",      # 中文字体
+    "font_latin": "",         # 英文字体（scope 含 latin 时必填）
+    "fallback_fonts": ["STSong", "Songti TC"],
+    "mode": "auto",           # auto | brute
+}
+
+
+def manual_restore_text():
+    return f"""  首选（工具自救）：
+    {CANON} uninstall
+  或手动执行（注意：必须同步 Info.plist 的 asar 完整性哈希，否则 app 起不来）：
+    cd "{RES}"
+    rm -rf app app.asar.clfont-new*
+    [ -f app.asar.bak ] && mv -f app.asar.bak app.asar
+    H=$(python3 -c "import struct,hashlib;f=open('app.asar','rb');\\
+_,_,_,jl=struct.unpack('<IIII',f.read(16));print(hashlib.sha256(f.read(jl)).hexdigest())")
+    /usr/libexec/PlistBuddy -c "Set :ElectronAsarIntegrity:Resources/app.asar:hash $H" \\
+      "{INFO_PLIST}"
+    codesign --force --deep --sign - "{APP}\""""
+
+
+# ---------------------------------------------------------------- 日志与输出
+
+class Log:
+    def __init__(self):
+        self.f = None
+
+    def open(self, cmd_name):
+        try:
+            LOG_DIR.mkdir(parents=True, exist_ok=True)
+            path = LOG_DIR / f"clfont-{time.strftime('%Y%m%d-%H%M%S')}-{cmd_name}.log"
+            self.f = open(path, "a", encoding="utf-8")
+            self.path = path
+            self.raw(f"=== clfont {cmd_name} · {time.strftime('%F %T')} · "
+                     f"app={APP} · argv={sys.argv[1:]} ===")
+        except OSError as e:
+            print(f"  ! 无法打开日志（继续执行）：{e}")
+
+    def raw(self, line):
+        if self.f:
+            try:
+                self.f.write(f"[{time.strftime('%T')}] {line}\n")
+                self.f.flush()
+                os.fsync(self.f.fileno())
+            except OSError:
+                pass
+
+
+L = Log()
+
+
+def _emit(prefix, msg):
+    print(f"{prefix}{msg}")
+    L.raw(f"{prefix.strip() or '·'} {msg}")
+
+
+def ok(msg):    _emit("  ✓ ", msg)
+def bad(msg):   _emit("  ✗ ", msg)
+def info(msg):  _emit("  · ", msg)
+def step(msg):  _emit("\n▸ ", msg)
+
+
+def die(msg, code=1):
+    _emit("\n✗ 失败：", msg)
+    sys.exit(code)
+
+
+def confirm(prompt, assume_yes=False):
+    if assume_yes:
+        print(f"{prompt} [y/N] y（--yes）")
+        L.raw(f"confirm auto-yes: {prompt}")
+        return True
+    try:
+        ans = input(f"{prompt} [y/N] ").strip().lower()
+    except EOFError:
+        ans = ""
+    L.raw(f"confirm: {prompt} -> {ans!r}")
+    return ans in ("y", "yes")
+
+
+def run_cmd(cmd, check=True):
+    L.raw("$ " + " ".join(map(str, cmd)))
+    r = subprocess.run(list(map(str, cmd)), capture_output=True, text=True)
+    if r.stdout.strip():
+        L.raw("stdout: " + r.stdout.strip()[:2000])
+    if r.stderr.strip():
+        L.raw("stderr: " + r.stderr.strip()[:2000])
+    L.raw(f"exit={r.returncode}")
+    if check and r.returncode != 0:
+        raise RuntimeError(
+            f"命令失败（exit {r.returncode}）：{' '.join(map(str, cmd))}"
+            f"\n    {r.stderr.strip()[:500]}")
+    return r
+
+
+# ---------------------------------------------------------------- 测试崩溃钩子
+
+def maybe_crash(tag):
+    spec = os.environ.get("CLFONT_CRASH_AT", "")
+    if not spec:
+        return
+    want, _, kind = spec.partition(":")
+    if want != tag:
+        return
+    L.raw(f"CRASH HOOK triggered: {spec}")
+    if kind == "int":
+        raise KeyboardInterrupt(f"测试钩子 {tag}")
+    print(f"  !! 测试钩子：SIGKILL @ {tag}")
+    os.kill(os.getpid(), signal.SIGKILL)
+
+
+# ---------------------------------------------------------------- 事务日志（journal）
+
+def journal_write(data):
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = JOURNAL.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1))
+        tmp.rename(JOURNAL)
+    except OSError as e:
+        L.raw(f"journal 写入失败：{e}")
+
+
+def journal_read():
+    try:
+        return json.loads(JOURNAL.read_text()) if JOURNAL.exists() else None
+    except (OSError, json.JSONDecodeError):
+        return {"corrupt": True}
+
+
+def journal_clear():
+    try:
+        JOURNAL.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+class Txn:
+    """事务：mark() 记录进度到 journal，add_undo() 入栈；rollback() 逆序撤销，
+    收尾一律重签 + 验证。"""
+
+    def __init__(self, name):
+        self.name = name
+        self.steps = []
+        self.undo = []
+        journal_write(self._state("started"))
+
+    def _state(self, status):
+        return {"txn": self.name, "app": str(APP), "status": status,
+                "time": time.strftime("%F %T"), "steps": self.steps,
+                "log": str(getattr(L, "path", ""))}
+
+    def mark(self, desc, done=True):
+        self.steps.append({"step": desc, "done": done,
+                           "time": time.strftime("%T")})
+        journal_write(self._state("in-progress"))
+        L.raw(f"txn mark: {desc} done={done}")
+
+    def add_undo(self, desc, fn):
+        self.undo.append((desc, fn))
+
+    def commit(self):
+        journal_clear()
+        L.raw("txn commit")
+
+    def rollback(self):
+        # 回滚期间屏蔽 Ctrl+C，避免二次中断留下半成品
+        old = signal.signal(signal.SIGINT, signal.SIG_IGN)
+        print("\n▸ 正在回滚（请勿再次中断）…")
+        L.raw("txn rollback begin")
+        journal_write(self._state("rolling-back"))
+        failed = []
+        for desc, fn in reversed(self.undo):
+            try:
+                fn()
+                ok(f"已撤销：{desc}")
+            except Exception as e:
+                bad(f"撤销失败：{desc} —— {e}")
+                failed.append(desc)
+        # 收尾：无论如何重签 + 验证（resource seal 对目录结构敏感，
+        # 即使文件已还原，签名也可能失效）
+        try:
+            resign()
+        except Exception as e:
+            bad(f"回滚收尾重签失败：{e}")
+            failed.append("重签名")
+        signal.signal(signal.SIGINT, old)
+        if failed:
+            journal_write(self._state("rollback-incomplete"))
+            print("\n✗ 回滚未完全成功（失败项：" + "、".join(failed) + "）")
+            print("  手动还原命令：\n" + manual_restore_text())
+            return False
+        journal_clear()
+        print("\n✓ 已回滚到原始状态（签名已验证）。")
+        return True
+
+
+# ---------------------------------------------------------------- 配置
+
+def load_config():
+    cfg = dict(DEFAULT_CONFIG)
+    if CONFIG_PATH.exists():
+        try:
+            cfg.update(json.loads(CONFIG_PATH.read_text()))
+        except (json.JSONDecodeError, OSError) as e:
+            info(f"配置文件损坏，忽略：{e}")
+    return cfg
+
+
+def save_config(cfg):
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG_PATH.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n")
+
+
+# ---------------------------------------------------------------- 基础探查
+
+def claude_version():
+    try:
+        with open(INFO_PLIST, "rb") as f:
+            return plistlib.load(f).get("CFBundleShortVersionString", "?")
+    except (OSError, plistlib.InvalidFileException):
+        return None
+
+
+def claude_pids():
+    """注意：pgrep 在部分环境下匹配不到 Claude 主进程，用 ps 按完整路径匹配。"""
+    r = subprocess.run(["ps", "-axo", "pid=,comm="], capture_output=True, text=True)
+    pids = []
+    for line in r.stdout.splitlines():
+        parts = line.strip().split(None, 1)
+        if len(parts) == 2 and parts[1] == str(BINARY):
+            pids.append(int(parts[0]))
+    return pids
+
+
+def claude_running():
+    return bool(claude_pids())
+
+
+def quit_claude(assume_yes):
+    if not claude_running():
+        return True
+    print("  ! Claude 正在运行，操作前必须退出。")
+    if not confirm("    是否代为退出 Claude？", assume_yes):
+        return False
+    # 只对「本次目标 app」的进程发信号。绝不能用
+    # osascript -e 'tell application "Claude" to quit'：AppleScript 按应用名
+    # 解析，会退掉正在运行的那个 Claude（通常是 /Applications 里的正式版），
+    # 而不是 --app 指定的副本——曾因此误退用户的正式 Claude。
+    for pid in claude_pids():
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
+    for _ in range(20):
+        if not claude_running():
+            ok("Claude 已退出")
+            return True
+        time.sleep(0.5)
+    for pid in claude_pids():
+        subprocess.run(["kill", str(pid)])
+    time.sleep(1)
+    if claude_running():
+        bad("无法退出 Claude，请手动退出后重试。")
+        return False
+    ok("Claude 已退出（kill）")
+    return True
+
+
+def is_patched():
+    """asar 里的 preload 是否含注入标记。"""
+    if not ASAR.exists():
+        return False
+    try:
+        header, base = asar_read_header(ASAR)
+    except (OSError, ValueError, json.JSONDecodeError):
+        return False
+    node = header
+    for part in PRELOAD_REL.strip("/").split("/"):
+        node = node.get("files", {}).get(part)
+        if node is None:
+            return False
+    try:
+        with open(ASAR, "rb") as f:
+            f.seek(base + int(node["offset"]))
+            return MARKER.encode() in f.read(int(node["size"]))
+    except (OSError, KeyError, ValueError):
+        return False
+
+
+# ---------------------------------------------------------------- asar（纯 Python）
+#
+# Claude Desktop 开启了两个 Electron fuse（用 npx @electron/fuses read 可查）：
+#   OnlyLoadAppFromAsar: Enabled              → 只能从 app.asar 加载，
+#                                               「改名 asar + 解包成 app/ 目录」
+#                                               这条老路已被硬性禁止（app 启动
+#                                               即 exit=1，零输出）。
+#   EnableEmbeddedAsarIntegrityValidation: Enabled
+#                                             → asar header 的 SHA256 记录在
+#                                               Info.plist 的 ElectronAsarIntegrity
+#                                               里，改了 asar 必须同步更新它。
+# 因此本工具改为「原地重打包 asar + 更新 Info.plist 哈希 + 重签」。
+# 打包器经往返测试：原样重打与官方 asar 逐字节一致。
+
+def asar_read_header(asar_path):
+    with open(asar_path, "rb") as f:
+        head = f.read(16)
+        if len(head) < 16:
+            raise ValueError("asar 文件过小")
+        _, pickle_size, _, json_len = struct.unpack("<IIII", head)
+        header = json.loads(f.read(json_len).decode("utf-8"))
+    return header, 8 + pickle_size
+
+
+def asar_integrity(buf, block_size=4194304):
+    """按 Electron per-file integrity 规格计算：整体 SHA256 + 分块 SHA256。
+    已对本机 asar 的 275 个打包文件（含 >4MB 多块文件）复算验证，全部一致。"""
+    blocks = [hashlib.sha256(buf[i:i + block_size]).hexdigest()
+              for i in range(0, len(buf), block_size)]
+    if not blocks:
+        blocks = [hashlib.sha256(b"").hexdigest()]
+    return {"algorithm": "SHA256", "hash": hashlib.sha256(buf).hexdigest(),
+            "blockSize": block_size, "blocks": blocks}
+
+
+def asar_header_hash(asar_path):
+    """Info.plist 里 ElectronAsarIntegrity 记录的就是 header JSON 的 SHA256。"""
+    with open(asar_path, "rb") as f:
+        _, _, _, json_len = struct.unpack("<IIII", f.read(16))
+        return hashlib.sha256(f.read(json_len)).hexdigest()
+
+
+def asar_pack(header, get_bytes, out_path):
+    """按原 offset 顺序重写内容区并重算 offset/size。
+    注意两个易错点（均已由往返测试验证）：
+      1) pickle 头：inner = align4(4 + json_len)，outer = 4 + inner，
+         写入 (4, outer, inner, json_len)。
+      2) 内容去重：多个条目可共享同一 (offset,size)（如相同的 woff2），
+         必须按块去重写一次，并让共享它的所有条目指向同一新 offset。"""
+    blocks, order = {}, []
+
+    def walk(node, rel):
+        for name, entry in node.get("files", {}).items():
+            sub = rel + "/" + name
+            if "files" in entry:
+                walk(entry, sub)
+            elif "link" in entry or entry.get("unpacked"):
+                continue
+            else:
+                key = (int(entry["offset"]), int(entry["size"]))
+                if key not in blocks:
+                    blocks[key] = []
+                    order.append((key, sub))
+                blocks[key].append(entry)
+    walk(header, "")
+    order.sort(key=lambda t: t[0][0])
+
+    blobs, cursor = [], 0
+    for key, sub in order:
+        data = get_bytes(sub, key)
+        changed = len(data) != key[1]
+        if changed and len(blocks[key]) > 1:
+            # 该内容块被多个条目共享，改它会殃及其它文件
+            raise RuntimeError(f"拒绝修改被去重共享的内容块：{sub}")
+        for entry in blocks[key]:
+            entry["offset"] = str(cursor)
+            entry["size"] = len(data)
+            # 必须重算 per-file integrity：Electron 开了完整性校验，
+            # 只更新 size 而留着旧哈希，文件一被加载就会校验失败。
+            if "integrity" in entry:
+                entry["integrity"] = asar_integrity(
+                    data, entry["integrity"].get("blockSize", 4194304))
+        blobs.append(data)
+        cursor += len(data)
+
+    hdr_json = json.dumps(header, separators=(",", ":"),
+                          ensure_ascii=False).encode("utf-8")
+    jl = len(hdr_json)
+    inner = (4 + jl + 3) // 4 * 4
+    outer = 4 + inner
+    tmp = Path(str(out_path) + ".tmp")
+    with open(tmp, "wb") as f:
+        f.write(struct.pack("<IIII", 4, outer, inner, jl))
+        f.write(hdr_json)
+        f.write(b"\0" * (inner - 4 - jl))
+        for b in blobs:
+            f.write(b)
+        f.flush()
+        os.fsync(f.fileno())
+    tmp.replace(out_path)
+
+
+def plist_get_asar_hash():
+    r = subprocess.run(
+        ["/usr/libexec/PlistBuddy", "-c",
+         "Print :ElectronAsarIntegrity:Resources/app.asar:hash", str(INFO_PLIST)],
+        capture_output=True, text=True)
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def plist_set_asar_hash(value):
+    run_cmd(["/usr/libexec/PlistBuddy", "-c",
+             f"Set :ElectronAsarIntegrity:Resources/app.asar:hash {value}",
+             str(INFO_PLIST)])
+
+
+# ---------------------------------------------------------------- CSS 构造
+#
+# 注入策略（第三轮重写，renderer 层，零主进程改动）：
+#   聊天内容是远程 claude.ai，用与桌面壳同一套 CDS 设计令牌，字体走 CSS
+#   变量 --font-anthropic-serif / --font-anthropic-sans（变量名从本地
+#   bundle 已确认，非 CDP 探测，稳定可靠）。默认在这两个变量值最前面插入
+#   "ClaudeCJKSerif"：因 @font-face 的 unicode-range 只覆盖 CJK 区段，
+#   拉丁字符自然回退到原本的 anthropic 字体，中文变宋体，互不影响。
+#   brute 模式（--mode brute）额外加一条全局兜底规则，用于万一变量名不
+#   匹配的情况（代价：sans UI 的拉丁也会变 serif，属可接受的退化）。
+
+# CDS 字体栈（从本地 .vite/renderer/*/assets/*.css 确认，claude.ai 同款）
+CDS_SERIF = '"anthropic-serif", ui-serif, Georgia, "Times New Roman", serif'
+CDS_SANS = ('"anthropic-sans", ui-sans-serif, -apple-system, BlinkMacSystemFont, '
+            '"Segoe UI", sans-serif')
+
+
+def _locs(names):
+    seen, out = set(), []
+    for n in names:
+        if n and n not in seen:
+            seen.add(n)
+            out.append(f'local("{n}")')
+    return ", ".join(out)
+
+
+def _srcs(cfg, key="font"):
+    """返回 (常规 src, 粗体 src)。GUI 选字体时会写入 <key>_regular /
+    <key>_bold（该族常规/粗体面的 PostScript 名），这样粗体命中真实粗体面
+    而不是系统合成加粗。key 为 font（中文）或 font_latin（英文）。"""
+    name = cfg.get(key) or ""
+    if not name:
+        return "", ""
+    fonts = [name]
+    if key == "font":
+        fonts += list(cfg.get("fallback_fonts", []))
+    reg = cfg.get(key + "_regular")
+    bold = cfg.get(key + "_bold")
+    if key == "font" and not reg and not bold and name == "Songti SC":
+        reg, bold = "STSongti-SC-Regular", "STSongti-SC-Bold"
+    return _locs([reg] + fonts), _locs([bold or reg] + fonts)
+
+
+def scope_specs(cfg):
+    """按 scope 展开成 [(码位区间, 常规 src, 粗体 src)]。字体没填的分组跳过。"""
+    scope = cfg.get("scope", "cjk")
+    out = []
+    if scope in ("cjk", "both"):
+        reg, bold = _srcs(cfg, "font")
+        if reg:
+            out.append((UNICODE_RANGE_CJK, reg, bold))
+    if scope in ("latin", "both"):
+        reg, bold = _srcs(cfg, "font_latin")
+        if reg:
+            out.append((UNICODE_RANGE_LATIN, reg, bold))
+    return out
+
+
+def font_face_css(cfg):
+    reg_src, bold_src = _srcs(cfg)
+    return (
+        f'@font-face{{font-family:"ClaudeCJKSerif";font-weight:normal;'
+        f'src:{reg_src};unicode-range:{UNICODE_RANGE};}}'
+        f'@font-face{{font-family:"ClaudeCJKSerif";font-weight:bold;'
+        f'src:{bold_src};unicode-range:{UNICODE_RANGE};}}'
+    )
+
+
+# Claude 正文/界面用的两个 webfont 家族（2026-08-31 在 claude.ai 实测确认）。
+PAGE_FONT_FAMILIES = ("anthropic-sans", "anthropic-serif")
+
+# brute 模式额外覆盖的常见具名字体族。注意只能列**具名**字体：
+# sans-serif / serif / system-ui / ui-sans-serif / -apple-system 这些是 CSS
+# 关键字，@font-face 不允许用它们当 family name，覆盖不了。
+EXTRA_FONT_FAMILIES = (
+    "Helvetica", "Helvetica Neue", "Arial", "Georgia", "Times", "Times New Roman",
+    "Inter", "Roboto", "Segoe UI", "SF Pro", "SF Pro Text", "SF Pro Display",
+    "PingFang SC", "PingFang TC", "Hiragino Sans GB", "Heiti SC",
+    "Microsoft YaHei", "Noto Sans SC", "Noto Sans CJK SC", "Source Han Sans SC",
+)
+
+
+def face_override_css(cfg, families=PAGE_FONT_FAMILIES):
+    """给页面自己那两个家族再补一条只覆盖 CJK 码位的 @font-face。
+
+    同名家族有多条 @font-face 时，重叠码位上后声明的那条生效；我们的样式是
+    追加在文档末尾的，所以 CJK 走选定字体，拉丁字形仍由原来的 anthropic 字体
+    渲染。好处是**完全不改任何 font-family**——侧边栏那些图标其实就是
+    anthropic-sans 里的字形，一旦覆盖 font-family 就会变成豆腐块。"""
+    out = []
+    for rng, reg_src, bold_src in scope_specs(cfg):
+        for fam in families:
+            for style in ("normal", "italic"):
+                # 页面自己的 face 声明的是可变字重 300 800，这里按常规/粗体拆
+                # 两段，免得粗体落回原字体（那样又会走系统兜底）。
+                out.append(f'@font-face{{font-family:"{fam}";src:{reg_src};'
+                           f'unicode-range:{rng};'
+                           f'font-weight:100 500;font-style:{style};}}')
+                out.append(f'@font-face{{font-family:"{fam}";src:{bold_src};'
+                           f'unicode-range:{rng};'
+                           f'font-weight:501 900;font-style:{style};}}')
+    return "".join(out)
+
+
+def vars_css():
+    """把 ClaudeCJKSerif 前插到 CDS 字体变量——拉丁不受影响（unicode-range）。"""
+    return (
+        ":root{"
+        f'--font-anthropic-serif:"ClaudeCJKSerif", {CDS_SERIF} !important;'
+        f'--font-anthropic-sans:"ClaudeCJKSerif", {CDS_SANS} !important;'
+        "}"
+    )
+
+
+def brute_css(cfg):
+    """兜底：把 CJK 覆盖扩大到 EXTRA_FONT_FAMILIES 里的常见具名字体族。
+
+    2026-08-31 起不再用 `*{font-family:...!important}` 那种全局覆盖：
+    Claude 侧边栏的图标是某个图标字体的字形，一旦覆盖 font-family 就会
+    全变成豆腐块，而且那个字体的名字我们并不知道，靠 :not() 排除是治不好的。
+    改成只多补几条 @font-face、始终不碰 font-family 之后，图标不可能被波及。
+    代价：`system-ui` / `-apple-system` / `sans-serif` 这类 CSS 关键字覆盖
+    不了（@font-face 不接受关键字当 family name），那些地方的中文仍走系统字体。"""
+    return face_override_css(cfg, EXTRA_FONT_FAMILIES)
+
+
+def build_css(mode, cfg):
+    scope = cfg.get("scope", "cjk")
+    parts = [f"/* {MARKER} mode={mode} scope={scope} */"]
+    if scope in ("cjk", "both"):
+        # ClaudeCJKSerif + CDS 变量前插只服务于中文；只换英文时不要注入，
+        # 否则中文也会跟着变。
+        parts += [font_face_css(cfg), vars_css()]
+    parts.append(face_override_css(cfg))
+    if mode == "brute":
+        parts.append(brute_css(cfg))
+    css = " ".join(parts)
+    assert "`" not in css and "${" not in css and "\\" not in css
+    return css
+
+
+def build_preload_injection(css):
+    """构造追加到 preload(mainView.js) 尾部的自包含 IIFE：把上面 CSS 作为
+    <style> 塞进远程页面的 DOM。全程 try/catch，绝不可能让 preload 抛错；
+    CSS 以 base64 携带，杜绝任何引号/反引号转义问题。"""
+    b64 = base64.b64encode(css.encode("utf-8")).decode("ascii")
+    return (
+        f'\n;/* {MARKER} */(function(){{try{{'
+        f'var B="{b64}";'
+        'var CSS=(function(){try{var s=atob(B),a=new Uint8Array(s.length);'
+        'for(var i=0;i<s.length;i++)a[i]=s.charCodeAt(i);'
+        "return new TextDecoder('utf-8').decode(a);}catch(e){return atob(B);}})();"
+        f'var ID="{MARKER}";'
+        'function inj(){try{if(typeof document==="undefined")return;'
+        'if(document.getElementById(ID))return;'
+        'var st=document.createElement("style");st.id=ID;'
+        'st.setAttribute("data-clfont","1");st.textContent=CSS;'
+        'var r=document.head||document.documentElement;if(r)r.appendChild(st);}'
+        'catch(e){}}'
+        'inj();'
+        'try{if(typeof document!=="undefined"&&document.addEventListener)'
+        'document.addEventListener("DOMContentLoaded",inj);}catch(e){}'
+        '}catch(e){}})();\n'
+    )
+
+
+
+# ---------------------------------------------------------------- 打补丁
+#
+# 只改 renderer 层，主进程（package.json 的 main = .vite/build/index.pre.js
+# 及其 require 的 index*.chunk-*.js）一个字节都不碰。
+
+# 加载 claude.ai 视图的 preload（webPreferences.preload 指向）。它运行在
+# renderer 隔离世界、能触达远程聊天 DOM，且不含任何主进程 API。
+PRELOAD_REL = "/.vite/build/mainView.js"
+# 本地壳窗口的 HTML（只承载标题栏，聊天内容是远程的）——顺带打，属兜底
+HTML_REL = "/.vite/renderer/main_window/index.html"
+
+
+def _is_renderer_preload(data):
+    """粗校验：像 preload（有 ipcRenderer/contextBridge），且不含主进程特征。
+    主进程入口是 package.json 的 main（.vite/build/index.pre.js），绝不能碰。"""
+    looks_preload = (b"ipcRenderer" in data) or (b"contextBridge" in data)
+    main_markers = (b"app.whenReady", b"new BrowserWindow", b"app.on(")
+    looks_main = any(mk in data for mk in main_markers)
+    return looks_preload and not looks_main
+
+
+def patch_asar(src_asar, out_asar, css):
+    """读原 asar，仅改 renderer 层文件，重打包到 out_asar。
+    主进程文件（index.pre.js 及其 require 的 chunk）原样透传。"""
+    header, base = asar_read_header(src_asar)
+    injection = build_preload_injection(css).encode("utf-8")
+    style = f"<style>/* {MARKER} */ {css}</style>".encode("utf-8")
+    patched, seen = [], set()
+
+    fsrc = open(src_asar, "rb")
+    try:
+        def get(sub, key):
+            off, size = key
+            fsrc.seek(base + off)
+            data = fsrc.read(size)
+            if sub == PRELOAD_REL:
+                if MARKER.encode() in data:
+                    raise RuntimeError("preload 已含 clfont 注入（应先还原）")
+                if not _is_renderer_preload(data):
+                    raise RuntimeError(
+                        f"{PRELOAD_REL} 看起来不是 renderer preload"
+                        "（含主进程特征或缺少 ipcRenderer/contextBridge），"
+                        "为避免误伤主进程，中止。")
+                seen.add(sub)
+                patched.append(sub)
+                return data + injection
+            if sub == HTML_REL and b"</head>" in data:
+                seen.add(sub)
+                patched.append(sub)
+                return data.replace(b"</head>", style + b"\n</head>", 1)
+            return data
+
+        asar_pack(header, get, out_asar)
+    finally:
+        fsrc.close()
+
+    if PRELOAD_REL not in seen:
+        raise RuntimeError(
+            f"未在 asar 中找到 preload {PRELOAD_REL}（Claude 结构可能已变化），"
+            "无法影响远程聊天页面，中止。")
+    return patched
+
+
+# ---------------------------------------------------------------- 签名
+
+def codesign_available():
+    """codesign 属于 Xcode 命令行工具，干净的 macOS 上 /usr/bin/codesign 只是
+    一个占位 shim，跑起来会要求先装 CLT。必须在动 app 之前就查——回滚同样要
+    重签，等到那时才发现没有，会留下一个签不上名、起不来的 Claude。"""
+    exe = shutil.which("codesign")
+    if not exe:
+        return False, "系统里找不到 codesign"
+    # codesign 没有 --version；不带参数跑一下，真家伙会打印用法，
+    # CLT 占位 shim 则会打印 xcode-select 的提示并请求安装。
+    try:
+        r = subprocess.run([exe], capture_output=True, text=True, timeout=30)
+    except Exception as e:
+        return False, f"codesign 无法运行（{e}）"
+    out = (r.stdout or "") + (r.stderr or "")
+    if "Usage: codesign" in out:
+        return True, exe
+    first = (out.strip().splitlines() or [""])[0]
+    return False, first or f"codesign 退出码 {r.returncode}"
+
+
+def require_codesign():
+    good, detail = codesign_available()
+    if good:
+        return
+    die("需要 Xcode 命令行工具（codesign）才能给 Claude 重新签名。\n"
+        f"    {detail}\n"
+        "    请先运行：xcode-select --install\n"
+        "    装好后重试。（此刻尚未对 Claude 做任何修改。）")
+
+
+def signing_team():
+    """返回 app 的 TeamIdentifier；ad-hoc 签名返回 None。"""
+    r = subprocess.run(["codesign", "-dv", str(APP)],
+                       capture_output=True, text=True)
+    out = (r.stderr or "") + (r.stdout or "")
+    for line in out.splitlines():
+        if line.startswith("TeamIdentifier="):
+            v = line.split("=", 1)[1].strip()
+            return None if v in ("", "not set") else v
+    return None
+
+
+def is_adhoc_signed():
+    r = subprocess.run(["codesign", "-dv", str(APP)],
+                       capture_output=True, text=True)
+    return "adhoc" in ((r.stderr or "") + (r.stdout or ""))
+
+
+def pristine_backup_for_current():
+    """当前已安装版本对应的整包备份（打补丁前留的原版，签名是 Anthropic 的）。"""
+    v = claude_version()
+    if not v:
+        return None
+    p = backup_path(v)
+    return p if (p / "Contents/Info.plist").exists() else None
+
+
+def sign_valid():
+    return subprocess.run(["codesign", "-v", str(APP)],
+                          capture_output=True).returncode == 0
+
+
+def resign():
+    info("重签名整个 app（整包较大，可能需要 1–2 分钟，请耐心等待；"
+         "此阶段中断也会触发自动回滚）…")
+    run_cmd(["codesign", "--force", "--deep", "--sign", "-", str(APP)])
+    if not sign_valid():
+        raise RuntimeError("codesign -v 验证未通过")
+    ok("签名验证通过")
+
+
+# ---------------------------------------------------------------- 冒烟测试
+
+def smoke_test(timeout=20):
+    """启动 app 验证「能活着起来」——事务 commit 的真正前提。
+    第二轮事故：文件全绿但主进程静默退出（exit 0）。此测试专抓这种：
+    直接 exec 主二进制，若它秒退或无进程存活即判失败 → 触发回滚。
+    检测用 claude_pids()（按二进制路径），不用 pgrep（pgrep 匹配不到主进程）。
+    CLFONT_SMOKE_USER_DATA_DIR 可指定独立 user-data-dir（测试副本用，避免与
+    正在运行的正式 Claude 撞 single-instance 锁）。"""
+    if os.environ.get("CLFONT_SMOKE_FORCE_FAIL"):
+        L.raw("smoke FORCE_FAIL hook -> return False")
+        info("测试钩子 CLFONT_SMOKE_FORCE_FAIL：强制判定冒烟失败")
+        return False
+    for pid in claude_pids():
+        subprocess.run(["kill", str(pid)],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    time.sleep(1)
+    args = [str(BINARY)]
+    udd = os.environ.get("CLFONT_SMOKE_USER_DATA_DIR")
+    if udd:
+        args += ["--user-data-dir", udd]
+    info(f"启动 app，最多观察 {timeout}s，确认进程存活…")
+    L.raw("smoke launch: " + " ".join(args))
+    proc = subprocess.Popen(args, stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL)
+    alive = False
+    stable = 0
+    deadline = time.time() + timeout
+    try:
+        while time.time() < deadline:
+            time.sleep(1.5)
+            ec = proc.poll()
+            pids = claude_pids()
+            if ec is not None and not pids:
+                info(f"主进程已退出（exit={ec}）且无存活进程 —— 冒烟失败")
+                L.raw(f"smoke fail: exited ec={ec}")
+                break
+            if pids:
+                stable += 1
+                if stable >= 4:   # ≈6s 持续存活
+                    alive = True
+                    break
+    finally:
+        # 无论成败，关闭本次启动的实例，避免残留/影响后续回滚或文件操作
+        for pid in claude_pids():
+            subprocess.run(["kill", str(pid)],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if proc.poll() is None:
+            proc.terminate()
+        time.sleep(2)
+        for pid in claude_pids():
+            subprocess.run(["kill", "-9", str(pid)],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        time.sleep(0.5)
+    L.raw(f"smoke result: alive={alive}")
+    return alive
+
+
+# ---------------------------------------------------------------- 备份
+
+def target_slug():
+    """非默认目标（--app 指定的其它 Claude.app）在备份名里加一段路径哈希。
+    否则多个目标共用 DATA_DIR 时会按版本号撞车——曾导致给测试副本还原时
+    取到正式版的备份，把副本换成了正式版的身份。默认目标保持老命名不变，
+    这样已有备份仍然认得出来。"""
+    if str(APP) == "/Applications/Claude.app":
+        return ""
+    return "-" + hashlib.sha256(str(APP).encode()).hexdigest()[:8]
+
+
+_SLUG_RE = re.compile(r"-[0-9a-f]{8}$")
+
+
+def backup_path(version):
+    return DATA_DIR / f"Claude-backup-{version}{target_slug()}.app"
+
+
+def list_backups():
+    """只列当前目标的备份，按新到旧。"""
+    slug = target_slug()
+    out = []
+    for pth in DATA_DIR.glob("Claude-backup-*.app"):
+        stem = pth.name[len("Claude-backup-"):-len(".app")]
+        m = _SLUG_RE.search(stem)
+        if slug:
+            if m and m.group(0) == slug:
+                out.append(pth)
+        elif not m:
+            out.append(pth)
+    return sorted(out, key=lambda q: q.stat().st_mtime, reverse=True)
+
+
+def make_backup(version):
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    dest = backup_path(version)
+    if (dest / "Contents/Info.plist").exists():
+        ok(f"当前版本 {version} 的备份已存在，跳过：{dest}")
+        return
+    free = shutil.disk_usage(Path.home()).free
+    if free < 3 * 1024 ** 3:
+        raise RuntimeError(f"磁盘剩余空间不足 3GB（{free / 1024**3:.1f}GB），中止")
+    info(f"整包备份（约 1 分钟）：ditto {APP} {dest}")
+    try:
+        run_cmd(["ditto", str(APP), str(dest)])
+    except Exception:
+        shutil.rmtree(dest, ignore_errors=True)
+        raise
+    ok(f"已备份到 {dest}")
+    backups = list_backups()
+    for old in backups[KEEP_BACKUPS:]:
+        info(f"清理旧备份：{old.name}")
+        shutil.rmtree(old, ignore_errors=True)
+
+
+# ---------------------------------------------------------------- 还原
+
+def restore_pristine():
+    """把 app 修回未打补丁状态（幂等，容忍任意半成品）：
+    还原 asar → 同步 Info.plist 哈希 → 清理残留 → 按需重签 + 验证。"""
+    changed = False
+    # 清理旧机制/中途残留
+    for stale in (APP_DIR, RES / "app.clfont-tmp"):
+        if stale.exists():
+            info(f"删除 {stale.name}/（旧机制残留）")
+            shutil.rmtree(stale)
+            changed = True
+    for stale in (RES / "app.asar.clfont-new", RES / "app.asar.clfont-new.tmp"):
+        if stale.exists():
+            info(f"删除 {stale.name}")
+            stale.unlink()
+            changed = True
+
+    if ASAR_BAK.exists():
+        # bak 是打补丁前的原始 asar；若 asar 已被补丁替换则还原之
+        if not ASAR.exists() or is_patched():
+            info("恢复 app.asar.bak → app.asar")
+            shutil.copy2(ASAR_BAK, ASAR)
+            changed = True
+        else:
+            info("app.asar 未含补丁（可能已被更新覆盖），保留之")
+        ASAR_BAK.unlink()
+        changed = True
+    if not ASAR.exists():
+        raise RuntimeError("app.asar 与 app.asar.bak 均不存在，需从整包备份恢复")
+
+    # 同步 Info.plist 完整性哈希到当前 asar（不同步则 app 起不来）
+    want = asar_header_hash(ASAR)
+    if plist_get_asar_hash() != want:
+        info(f"同步 ElectronAsarIntegrity 哈希 → {want[:12]}…")
+        plist_set_asar_hash(want)
+        changed = True
+
+    # 即使文件已还原，resource seal 也可能失效——验证不过就重签
+    if changed or not sign_valid():
+        resign()
+    else:
+        ok("签名验证通过（无需重签）")
+
+
+def backup_size(path):
+    """返回字节数。APFS 克隆的块是共享的，这里给的是逻辑大小，
+    实际占盘只会更小，作为上限展示足够。"""
+    r = subprocess.run(["du", "-sk", str(path)], capture_output=True, text=True)
+    try:
+        return int(r.stdout.split()[0]) * 1024
+    except (ValueError, IndexError):
+        return 0
+
+
+def human_size(n):
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if n < 1024 or unit == "TB":
+            return f"{n:.1f} {unit}" if unit not in ("B", "KB") else f"{n:.0f} {unit}"
+        n /= 1024
+
+
+def backup_version(path):
+    """从备份目录名里取版本号：Claude-backup-<版本>[-<slug>].app"""
+    stem = path.name[len("Claude-backup-"):-len(".app")]
+    return _SLUG_RE.sub("", stem)
+
+
+def all_backups():
+    return sorted(DATA_DIR.glob("Claude-backup-*.app"),
+                  key=lambda q: q.stat().st_mtime, reverse=True)
+
+
+def cmd_backups(args):
+    print(f"clfont backups（目标：{APP}）")
+    cur = claude_version()
+    items = list_backups()
+    others = [b for b in all_backups() if b not in items]
+    if not items and not others:
+        info("没有任何整包备份。首次 install 时会自动创建。")
+        return
+    total = keep_bytes = drop_bytes = 0
+    prunable = []
+    for b in items:
+        size = backup_size(b)
+        total += size
+        if backup_version(b) == cur:
+            keep_bytes += size
+            ok(f"{b.name}  {human_size(size)}  ← 与当前版本一致，"
+               "还原时可连原始签名一起恢复，请勿删除")
+        else:
+            drop_bytes += size
+            prunable.append(b)
+            info(f"{b.name}  {human_size(size)}  ← 旧版本，已无法用于还原，可清理")
+    # 目标换过路径后，旧路径的备份会成为孤儿：两个目标都列不到它，
+    # 用户也就永远删不掉。--all 把它们一并显示出来。
+    if others:
+        osize = sum(backup_size(b) for b in others)
+        if getattr(args, "all", False):
+            total += osize
+            for b in others:
+                bsize = backup_size(b)
+                drop_bytes += bsize
+                prunable.append(b)
+                info(f"{b.name}  {human_size(bsize)}  ← 属于其他目标（如测试 Claude）"
+                     "或已不存在的目标")
+        else:
+            info(f"另有 {len(others)} 份属于其他目标的备份（{human_size(osize)}），"
+                 "用 clfont backups --all 查看和清理")
+
+    shown = len(items) + (len(others) if getattr(args, "all", False) else 0)
+    info(f"合计 {human_size(total)}（{shown} 份），"
+         f"其中 {len(prunable)} 份可清理，可释放 {human_size(drop_bytes)}")
+    if getattr(args, "purge", False):
+        # 删光当前目标的备份，包括与当前版本一致的那份。只在「彻底删掉这个
+        # 目标」时才用得上（比如删除测试副本），平时不该走这条路。
+        prunable = list(items) + (prunable if getattr(args, "all", False) else [])
+        drop_bytes = sum(backup_size(b) for b in prunable)
+        bad("--purge 会删掉包含当前版本在内的全部备份，"
+            "该目标将无法再恢复原始签名。")
+    elif not getattr(args, "prune", False):
+        if prunable:
+            info("清理：clfont backups --prune" + (" --all" if getattr(args, "all", False) else ""))
+        return
+    if not prunable:
+        ok("没有可清理的备份。")
+        return
+    if getattr(args, "all", False):
+        bad("注意：--all 会连其他目标的备份一起删。那些目标将失去"
+            "「还原时恢复原始签名」的能力。")
+    if not confirm(f"  删除这 {len(prunable)} 份备份？", args.yes):
+        info("已取消。")
+        return
+    for b in prunable:
+        shutil.rmtree(b, ignore_errors=True)
+        ok(f"已删除 {b.name}")
+    info(f"释放约 {human_size(drop_bytes)}")
+
+
+def restore_from_backup(assume_yes, src=None):
+    if src is None:
+        backups = list_backups()
+        if not backups:
+            raise RuntimeError("没有 app.asar(.bak)，也没有整包备份。"
+                               "请到 https://claude.ai/download 重新下载安装 Claude。")
+        src = backups[0]
+    print(f"  将从整包备份还原：{src}")
+    print(f"  这会删除并替换整个 {APP}")
+    if not confirm("  继续？", assume_yes):
+        raise RuntimeError("用户取消")
+    shutil.rmtree(APP)
+    run_cmd(["ditto", str(src), str(APP)])
+    # 备份里的 plist 哈希应与其 asar 自洽；不自洽则修正（否则 app 起不来）
+    if ASAR.exists():
+        want = asar_header_hash(ASAR)
+        if plist_get_asar_hash() != want:
+            info(f"修正备份的 ElectronAsarIntegrity 哈希 → {want[:12]}…")
+            plist_set_asar_hash(want)
+            resign()
+            return
+    if sign_valid():
+        ok("签名验证通过")
+    else:
+        info("备份签名校验未通过，重新 ad-hoc 签名")
+        resign()
+
+
+# ---------------------------------------------------------------- 自安装
+
+def ensure_self_installed():
+    """install 前把自身落盘到固定位置，保证事后可自救。失败则拒绝继续。"""
+    me = Path(__file__).resolve()
+    try:
+        if CANON.exists() and CANON.resolve() == me:
+            ok(f"工具已在固定位置：{CANON}")
+        else:
+            CANON.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(me, CANON)
+            os.chmod(CANON, 0o755)
+            ok(f"已将自身安装到 {CANON}（供事后自救）")
+    except OSError as e:
+        raise RuntimeError(
+            f"无法把工具复制到 {CANON}（{e}）。"
+            "为保证失败时能自救，拒绝继续 install。") from e
+    if str(CANON.parent) not in os.environ.get("PATH", "").split(":"):
+        info(f"提示：{CANON.parent} 不在 PATH 中，自救时请用完整路径 {CANON}")
+
+
+# ---------------------------------------------------------------- 子命令
+
+def check_prev_txn():
+    j = journal_read()
+    if not j:
+        return
+    if j.get("corrupt"):
+        info("发现损坏的事务日志，忽略")
+        return
+    bad(f"发现未完成的事务：{j.get('txn')} @ {j.get('time')}（{j.get('status')}），"
+        f"app={j.get('app')}")
+    info(f"事务步骤：{'; '.join(s['step'] for s in j.get('steps', []))}")
+    if j.get("log"):
+        info(f"详细日志：{j['log']}")
+
+
+def cmd_install(args):
+    print(f"clfont install（目标：{APP}）")
+    cfg = load_config()
+    mode = args.mode or cfg.get("mode", "auto")
+    if mode not in ("auto", "brute"):
+        mode = "auto"
+    if getattr(args, "scope", None):
+        cfg["scope"] = args.scope
+    if cfg.get("scope") not in ("cjk", "latin", "both"):
+        cfg["scope"] = "cjk"
+    if not scope_specs(cfg):
+        die("没有可用的字体设置：scope=%s，但对应的字体名为空。" % cfg["scope"])
+
+    step("准备")
+    require_codesign()
+    ensure_self_installed()
+    version = claude_version()
+    if version is None:
+        die(f"未找到 {APP}")
+    ok(f"Claude Desktop {version}")
+    check_prev_txn()
+    if not ASAR.exists() and not ASAR_BAK.exists():
+        die("app.asar 与 app.asar.bak 均不存在，应用结构异常，中止。")
+    if not quit_claude(args.yes):
+        die("Claude 仍在运行", 2)
+
+    txn = Txn("install")
+    try:
+        # 幂等 / 清理任何残留：先修回原始状态
+        if ASAR_BAK.exists() or APP_DIR.exists() or is_patched() or not sign_valid():
+            step("检测到旧补丁或残留，先修回原始状态（幂等）")
+            restore_pristine()
+            txn.mark("清理旧补丁")
+
+        step("整包备份")
+        make_backup(version)
+        txn.mark("备份")
+        maybe_crash("after-backup")
+
+        step("重打包 app.asar（只改 renderer preload，主进程零改动）")
+        css = build_css(mode, cfg)
+        staged = RES / "app.asar.clfont-new"
+        txn.add_undo("删除临时 asar",
+                     lambda: staged.unlink(missing_ok=True))
+        patched = patch_asar(ASAR, staged, css)
+        ok("已注入：" + "、".join(p.lstrip("/") for p in patched))
+        new_hash = asar_header_hash(staged)
+        txn.mark("重打包")
+        maybe_crash("after-patch")
+
+        step("上线补丁（备份原 asar → 替换 → 更新完整性哈希）")
+        old_hash = plist_get_asar_hash()
+        if not old_hash:
+            raise RuntimeError("读不到 Info.plist 的 ElectronAsarIntegrity 哈希")
+        txn.mark("即将替换 app.asar", done=False)
+        shutil.copy2(ASAR, ASAR_BAK)          # 原 asar 留底，供轻量还原
+        txn.add_undo("app.asar.bak 还原回 app.asar 并删除 bak",
+                     lambda: (shutil.copy2(ASAR_BAK, ASAR), ASAR_BAK.unlink())
+                     if ASAR_BAK.exists() else None)
+        staged.replace(ASAR)
+        txn.mark("app.asar 已替换")
+        maybe_crash("after-move")
+
+        txn.mark("即将更新 Info.plist 完整性哈希", done=False)
+        plist_set_asar_hash(new_hash)
+        txn.add_undo("Info.plist 哈希改回原值",
+                     lambda: plist_set_asar_hash(old_hash))
+        txn.mark("Info.plist 哈希已更新")
+        ok(f"ElectronAsarIntegrity 哈希 {old_hash[:12]}… → {new_hash[:12]}…")
+        maybe_crash("after-rename")
+
+        step("重签名")
+        maybe_crash("before-resign")
+        resign()
+        txn.mark("重签名并验证")
+
+        # commit 的定义 = 「app 能活着起来」，不是「文件操作完成」
+        step("启动冒烟测试（验证 app 能存活，失败即回滚）")
+        maybe_crash("before-smoke")
+        if not smoke_test():
+            raise RuntimeError(
+                "冒烟测试失败：打补丁后 app 无法存活。补丁已判定有害，回滚。")
+        ok("app 启动并存活，冒烟测试通过")
+        txn.mark("冒烟测试通过")
+
+        txn.commit()
+        cfg["last_install"] = {"version": version, "mode": mode,
+                               "time": time.strftime("%F %T")}
+        save_config(cfg)
+
+        print(f"\n✓ 完成。注入方式：{mode}，替换范围：{cfg.get('scope', 'cjk')}，"
+              f"中文字体：{cfg['font'] or '—'}，英文字体：{cfg.get('font_latin') or '—'}")
+        print("  说明：")
+        print("  · 重签后首次启动 Claude 可能要求重新登录/授权钥匙串"
+              "（Claude Safe Storage），属预期行为。")
+        print("  · 若聊天中文仍非宋体，运行 clfont install --mode brute 加兜底规则。")
+        print("  · Claude 更新后补丁会失效，重跑 clfont install 即可。")
+        print(f"  · 日志：{getattr(L, 'path', '-')}")
+        if mode == "brute":
+            print("  · 当前为 brute 兜底模式：CJK 覆盖已扩大到常见具名字体族，"
+                  "不改任何 font-family，图标不受影响。")
+
+    except BaseException as e:
+        if isinstance(e, SystemExit):
+            raise
+        name = "用户中断" if isinstance(e, KeyboardInterrupt) else f"异常：{e}"
+        print(f"\n✗ install 失败（{name}）")
+        L.raw(f"install failed: {e!r}")
+        txn.rollback()
+        sys.exit(130 if isinstance(e, KeyboardInterrupt) else 1)
+    finally:
+        for stale in (RES / "app.asar.clfont-new",
+                      RES / "app.asar.clfont-new.tmp"):
+            try:
+                stale.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
+def cmd_uninstall(args):
+    print(f"clfont uninstall（目标：{APP}）")
+    if claude_version() is None:
+        die(f"未找到 {APP}")
+    require_codesign()
+    check_prev_txn()
+    if not quit_claude(args.yes):
+        die("Claude 仍在运行", 2)
+    # 光把 asar 还原回去是不够的：重签只能签成 ad-hoc，Anthropic 的开发者签名、
+    # hardened runtime 和 entitlements（含 keychain-access-groups）都回不来。
+    # 整包备份里躺着的才是原封不动的原版，能还原就优先用它。
+    backup = pristine_backup_for_current()
+    adhoc = is_adhoc_signed()
+    try:
+        if not ASAR.exists() and not ASAR_BAK.exists():
+            step("从整包备份还原")
+            restore_from_backup(args.yes)
+        elif (not APP_DIR.exists() and not ASAR_BAK.exists()
+              and not is_patched() and sign_valid()
+              and plist_get_asar_hash() == asar_header_hash(ASAR)
+              and not (adhoc and backup)):
+            print("\n✓ 未检测到补丁且签名/哈希有效，无需还原。")
+            journal_clear()
+            return
+        elif backup is not None:
+            step("从整包备份还原（连 Anthropic 原始签名一起恢复）")
+            restore_from_backup(args.yes, src=backup)
+        else:
+            step("还原")
+            restore_pristine()
+        journal_clear()
+        team = signing_team()
+        if team:
+            print(f"\n✓ 已完全还原，且恢复了原始签名（TeamIdentifier={team}）。")
+        else:
+            print("\n✓ 已完全还原（签名已验证）。")
+            info("签名是 ad-hoc：Anthropic 的原始签名没能还原（没有当前版本的"
+                 "整包备份，或备份本身就已经是重签过的）。要彻底恢复请到 "
+                 "https://claude.ai/download 重新下载安装。")
+    except KeyboardInterrupt:
+        print("\n! 中断。可重跑 clfont uninstall（幂等），或手动执行：")
+        print(manual_restore_text())
+        sys.exit(130)
+    except Exception as e:
+        print(f"\n✗ 还原失败：{e}")
+        print("  手动还原命令：\n" + manual_restore_text())
+        sys.exit(1)
+
+
+def cmd_status(_args):
+    cfg = load_config()
+    version = claude_version()
+    print(f"clfont status（目标：{APP}）")
+    if version is None:
+        bad(f"未找到 {APP}")
+        sys.exit(1)
+    info(f"Claude 版本：{version}")
+    check_prev_txn()
+
+    patched = is_patched()
+    last = cfg.get("last_install") or {}
+    if patched:
+        desc = f"（{last.get('mode', '?')} 模式，{last.get('time', '?')}）" if last else ""
+        ok(f"已打补丁 {desc}")
+        if last.get("version") and last["version"] != version:
+            bad(f"Claude 已从 {last['version']} 更新到 {version}，"
+                "补丁可能已失效，建议重跑 clfont install")
+    else:
+        info("未打补丁" +
+             ("（上次曾对 %s 打过，可能被更新覆盖）" % last["version"]
+              if last.get("version") else ""))
+    info(f"app.asar：{'存在' if ASAR.exists() else '不存在'}"
+         f"，app.asar.bak（原版留底）：{'存在' if ASAR_BAK.exists() else '不存在'}")
+    if ASAR.exists():
+        want, got = asar_header_hash(ASAR), plist_get_asar_hash()
+        info(f"asar 完整性哈希：{'匹配' if want == got else '不匹配！app 将无法启动'}")
+    info(f"codesign -v：{'通过' if sign_valid() else '未通过！'}")
+
+    backups = list_backups()
+    info("整包备份：" + ("、".join(b.name for b in backups) if backups else "无"))
+    info(f"工具固定位置：{CANON}{'（已安装）' if CANON.exists() else '（未安装，install 时会自动复制）'}")
+    info(f"配置：范围 {cfg.get('scope', 'cjk')}，中文字体 {cfg['font'] or '—'}，"
+         f"英文字体 {cfg.get('font_latin') or '—'}，模式 {cfg.get('mode', 'auto')}")
+
+
+def cmd_doctor(_args):
+    print(f"clfont doctor（目标：{APP}）")
+    problems = 0
+
+    version = claude_version()
+    if version:
+        ok(f"Claude.app 存在，版本 {version}")
+    else:
+        bad(f"未找到 {APP}")
+        problems += 1
+
+    j = journal_read()
+    if j and not j.get("corrupt"):
+        bad(f"存在未完成事务（{j.get('txn')} @ {j.get('time')}，"
+            f"状态 {j.get('status')}）——跑 clfont uninstall 可修复")
+        info("步骤记录：" + "; ".join(
+            f"{s['step']}{'' if s.get('done') else '(未完成)'}"
+            for s in j.get("steps", [])))
+        problems += 1
+    else:
+        ok("无未完成事务")
+
+    songti = [p for p in (
+        Path("/System/Library/Fonts/Supplemental/Songti.ttc"),
+        Path("/System/Library/Fonts/Songti.ttc"),
+        Path.home() / "Library/Fonts/Songti.ttc") if p.exists()]
+    if songti:
+        ok(f"Songti SC 字体存在：{songti[0]}")
+    else:
+        bad("未找到 Songti.ttc（系统宋体），补丁后 CJK 可能落回默认 serif")
+        problems += 1
+
+    if claude_running():
+        bad("Claude 正在运行（install/uninstall 前需退出，脚本会代为处理）")
+    else:
+        ok("Claude 未在运行")
+
+    free = shutil.disk_usage(Path.home()).free / 1024 ** 3
+    if free >= 3:
+        ok(f"磁盘剩余 {free:.1f}GB（备份约需 1–2GB）")
+    else:
+        bad(f"磁盘剩余仅 {free:.1f}GB，可能不够备份")
+        problems += 1
+    good, detail = codesign_available()
+    if good:
+        ok(f"codesign 可用：{detail}")
+    else:
+        bad(f"codesign 不可用：{detail}。"
+            "先运行 xcode-select --install，否则 install/uninstall 都无法完成，"
+            "连回滚也签不了名")
+        problems += 1
+
+    backups = list_backups()
+    info(f"备份目录 {DATA_DIR}：当前目标有 {len(backups)} 份备份")
+    if version:
+        team = signing_team()
+        if team:
+            ok(f"签名身份：TeamIdentifier={team}（原厂签名）")
+        elif pristine_backup_for_current():
+            info("签名身份：ad-hoc（已被 clfont 重签）。"
+                 "当前版本有整包备份，clfont uninstall 可恢复原始签名")
+        else:
+            bad("签名身份：ad-hoc（已被 clfont 重签），且没有当前版本的整包备份，"
+                "原始签名无法还原——需要重新下载安装 Claude 才能恢复")
+            problems += 1
+    if CANON.exists():
+        ok(f"工具固定位置已安装：{CANON}")
+    else:
+        info(f"工具尚未安装到 {CANON}（install 时会自动复制）")
+
+    if version:
+        if APP_DIR.exists():
+            bad("存在 app/ 目录（旧机制残留）——当前 Claude 启用了 "
+                "OnlyLoadAppFromAsar fuse，该目录会导致 app 无法启动，"
+                "运行 clfont uninstall 清理")
+            problems += 1
+        if not ASAR.exists():
+            bad("app.asar 缺失！运行 clfont uninstall 从整包备份恢复")
+            problems += 1
+        else:
+            if is_patched():
+                ok("已打补丁（asar 内检测到注入标记）")
+            elif ASAR_BAK.exists():
+                bad("app.asar.bak 存在但 asar 无补丁标记（半成品状态），"
+                    "运行 clfont uninstall 可恢复")
+                problems += 1
+            else:
+                ok("未打补丁（原始状态）")
+            want, got = asar_header_hash(ASAR), plist_get_asar_hash()
+            if want == got:
+                ok("asar 完整性哈希与 Info.plist 匹配")
+            else:
+                bad("asar 完整性哈希与 Info.plist 不匹配——Claude 将无法启动！"
+                    "跑 clfont uninstall 修复")
+                problems += 1
+        if sign_valid():
+            ok("codesign 验证通过")
+        else:
+            bad("codesign 验证未通过——Claude 将无法启动！"
+                "跑 clfont uninstall（会重签）")
+            problems += 1
+
+    print(f"\n{'✗ 发现 %d 个问题' % problems if problems else '✓ 一切正常'}")
+    sys.exit(1 if problems else 0)
+
+
+# ---------------------------------------------------------------- main
+
+def main():
+    if sys.platform != "darwin":
+        die("仅支持 macOS")
+    ap = argparse.ArgumentParser(
+        prog="clfont",
+        description="Claude Desktop 中文字体补丁工具（中文→宋体，拉丁/代码不受影响）")
+    ap.add_argument("--app", help=argparse.SUPPRESS)  # 测试用：指定 .app 副本
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    p_install = sub.add_parser("install", help="打补丁（幂等，失败自动回滚）")
+    p_install.add_argument("--scope", choices=["cjk", "latin", "both"],
+                           help="替换哪种文字：cjk=中文，latin=英文，both=中英文")
+    p_install.add_argument("--mode", choices=["auto", "brute"],
+                           help="auto=改 CDS 字体变量（默认，拉丁不受影响）；"
+                                "brute=额外加全局兜底规则（变量名不匹配时用）")
+    p_install.add_argument("-y", "--yes", action="store_true",
+                           help="所有确认自动回答 yes")
+
+    p_un = sub.add_parser("uninstall", help="完全还原")
+    p_un.add_argument("-y", "--yes", action="store_true")
+
+    sub.add_parser("status", help="显示当前状态")
+    p_bk = sub.add_parser("backups", help="列出整包备份，可清理旧版本")
+    p_bk.add_argument("--prune", action="store_true",
+                      help="删除与当前版本不匹配的备份（那些已无法用于还原）")
+    p_bk.add_argument("--purge", action="store_true",
+                      help="删除当前目标的全部备份（含当前版本；用于彻底移除某个目标）")
+    p_bk.add_argument("--all", action="store_true",
+                      help="连同属于其他目标的备份一起列出/清理")
+    p_bk.add_argument("-y", "--yes", action="store_true", help="不询问直接执行")
+    sub.add_parser("doctor", help="环境自检")
+
+    args = ap.parse_args()
+    if args.app:
+        set_app(args.app)
+    def _sigterm(*_):
+        raise KeyboardInterrupt("SIGTERM")
+    signal.signal(signal.SIGTERM, _sigterm)
+    L.open(args.cmd)
+    {"install": cmd_install, "uninstall": cmd_uninstall,
+     "status": cmd_status, "doctor": cmd_doctor,
+     "backups": cmd_backups}[args.cmd](args)
+
+
+if __name__ == "__main__":
+    main()
