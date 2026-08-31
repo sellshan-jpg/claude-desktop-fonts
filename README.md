@@ -133,6 +133,10 @@ runtime，并声明了一组 entitlements。由于修改 `app.asar` 后必须重
 - **`keychain-access-groups` 权限丢失。** 该权限包含 WebAuthn 通行密钥及
   Microsoft workplace join 相关的钥匙串访问组。使用通行密钥或 Microsoft / Entra
   SSO 登录 Claude 的用户可能无法完成身份验证。
+- **Cowork（本地虚拟机）无法启动。** 该功能要求应用具备
+  `com.apple.security.virtualization` entitlement，重新签名后该条目丢失，界面会
+  提示「Claude's installation appears to be invalid or has been modified」。执行
+  「还原」恢复原始签名后即可恢复正常。
 - **hardened runtime 被关闭。** 应用的安全防护等级随之降低。
 - **TCC 权限记录失效。** 系统按代码签名身份记录隐私权限，签名变更后，麦克风、
   通知等权限需要重新授权。
