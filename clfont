@@ -747,9 +747,12 @@ def patch_asar(src_asar, out_asar, css):
 # ---------------------------------------------------------------- 签名
 
 def codesign_available():
-    """codesign 属于 Xcode 命令行工具，干净的 macOS 上 /usr/bin/codesign 只是
-    一个占位 shim，跑起来会要求先装 CLT。必须在动 app 之前就查——回滚同样要
-    重签，等到那时才发现没有，会留下一个签不上名、起不来的 Claude。"""
+    """确认 codesign 可用后再动 app：回滚同样要重签，等到那时才发现不可用，
+    会留下一个签不上名、起不来的 Claude。
+
+    注：codesign 本身是系统自带的真二进制，并不随 Xcode 命令行工具安装，
+    所以这道检查通常都会通过；真正依赖 CLT 的是运行本脚本的 python3
+    （/usr/bin/python3 只是 xcrun 转发壳），那道检查在 GUI 层。"""
     exe = shutil.which("codesign")
     if not exe:
         return False, "系统里找不到 codesign"

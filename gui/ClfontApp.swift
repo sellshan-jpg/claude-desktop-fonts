@@ -48,6 +48,36 @@ private struct GroupLabel: View {
     }
 }
 
+// MARK: - 开发者工具
+
+enum Toolchain {
+    /// clfont 的实际操作由一段 Python 脚本完成，而 `/usr/bin/python3` 是 Xcode
+    /// 命令行工具的转发壳（和 git 一样 118KB）——没装 CLT 时它只会弹系统安装
+    /// 提示，脚本根本起不来。所以这道检查必须在 GUI 层做：CLI 里那道检查等不到
+    /// 执行的机会。（codesign 相反，是系统自带的真二进制，不依赖 CLT。）
+    ///
+    /// 用 `xcode-select -p` 探测，而不是直接跑 python3：前者不会触发安装弹窗，
+    /// 不至于每次启动都打扰用户。
+    static func ready() -> Bool {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/xcode-select")
+        p.arguments = ["-p"]
+        p.standardOutput = FileHandle.nullDevice
+        p.standardError = FileHandle.nullDevice
+        do { try p.run() } catch { return false }
+        p.waitUntilExit()
+        return p.terminationStatus == 0
+    }
+
+    /// 触发系统自带的安装流程（弹 Apple 的安装对话框，不需要下载 Xcode）
+    static func requestInstall() {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/xcode-select")
+        p.arguments = ["--install"]
+        try? p.run()
+    }
+}
+
 // MARK: - 目标
 
 enum Target: String, CaseIterable, Identifiable {
@@ -155,6 +185,9 @@ final class OutputBox: @unchecked Sendable {
     /// 备份统计按目标缓存：切回来时立刻有内容，不必重新扫盘
     @Published var backupInfo: [Target: (summary: String, prunable: Int)] = [:]
     @Published var backupLoading: Set<Target> = []
+    @Published var toolsReady = true
+
+    func checkTools() { toolsReady = Toolchain.ready() }
 
     var replacesCJK: Bool { scope == "cjk" || scope == "both" }
     var replacesLatin: Bool { scope == "latin" || scope == "both" }
@@ -701,9 +734,10 @@ struct ContentView: View {
         .overlay { if confirmRestore { restoreSheet } }
         .overlay { if showHelp { helpSheet } }
         .ignoresSafeArea(edges: .top)
-        .onAppear { m.loadFonts(); m.loadConfig(); m.refreshAll() }
+        .onAppear { m.checkTools(); m.loadFonts(); m.loadConfig(); m.refreshAll() }
         .animation(DS.ease24, value: m.target)
         .animation(DS.pop, value: m.scope)
+        .animation(DS.pop, value: m.toolsReady)
         .onChange(of: m.target) { _, t in
             if detailOpen { m.loadBackups(t) }   // 有缓存就直接用，不再扫盘
         }
@@ -743,9 +777,46 @@ struct ContentView: View {
         .ignoresSafeArea()
     }
 
+    /// 没有命令行工具时，任何修改都执行不了——直接挡在最前面，并给一键安装入口。
+    private var toolchainNotice: some View {
+        HStack(alignment: .top, spacing: 12) {
+            ZStack {
+                Circle().fill(DS.prod.opacity(0.16)).frame(width: 22, height: 22)
+                Image(systemName: "exclamationmark")
+                    .font(.system(size: 11, weight: .bold)).foregroundStyle(DS.prod)
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Text("需要先安装 Xcode 命令行工具")
+                    .font(.system(size: 14, weight: .semibold))
+                Text("Clfont 的实际操作由一段脚本完成，它依赖 macOS 的 python3，"
+                     + "而该组件由 Xcode 命令行工具提供。未安装时无法执行任何修改，"
+                     + "你的 Claude 也不会被改动。")
+                    .font(.system(size: 12.5)).foregroundStyle(.secondary)
+                    .lineSpacing(2.5)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 10) {
+                    Button("安装命令行工具") { Toolchain.requestInstall() }
+                        .buttonStyle(.glassProminent).tint(DS.prod)
+                        .buttonBorderShape(.capsule)
+                    Button("我已安装，重新检测") { m.checkTools() }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 12)).foregroundStyle(DS.accent)
+                }
+                .padding(.top, 2)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(DS.prod.opacity(0.08)))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .strokeBorder(DS.prod.opacity(0.22), lineWidth: 1))
+    }
+
     private var content: some View {
         VStack(alignment: .leading, spacing: 20) {
             appHeader
+            if !m.toolsReady { toolchainNotice }
             statusCard
             targetGroup
             fontGroup
@@ -1102,7 +1173,7 @@ struct ContentView: View {
                 .buttonStyle(.glassProminent).tint(DS.accent)
                 .buttonBorderShape(.capsule)
                 .keyboardShortcut(.defaultAction)
-                .disabled(m.busy || !m.exists(m.target))
+                .disabled(m.busy || !m.exists(m.target) || !m.toolsReady)
 
                 Button { m.doctor() } label: {
                     Text("自检").font(.system(size: 14))
@@ -1110,7 +1181,7 @@ struct ContentView: View {
                 }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.capsule)
-                .disabled(m.busy || !m.exists(m.target))
+                .disabled(m.busy || !m.exists(m.target) || !m.toolsReady)
 
                 Button { m.openTarget() } label: {
                     Text("打开").font(.system(size: 14))
@@ -1118,10 +1189,10 @@ struct ContentView: View {
                 }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.capsule)
-                .disabled(m.busy || !m.exists(m.target))
+                .disabled(m.busy || !m.exists(m.target) || !m.toolsReady)
 
                 DestructiveButton(title: "还原") { confirmRestore = true }
-                    .disabled(m.busy || !m.exists(m.target))
+                    .disabled(m.busy || !m.exists(m.target) || !m.toolsReady)
             }
         }
         .padding(.top, 2)
@@ -1296,10 +1367,14 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 20) {
                         safetyNote
 
-                        helpStep(1, "首次使用：授予「App 管理」权限",
-                                 "Clfont 需要修改 Claude 的应用包，macOS 会在第一次执行安装时弹出系统请求，"
-                                 + "请选择「允许」。若此前误选了「不允许」，请前往「系统设置 → 隐私与安全性 → "
-                                 + "App 管理」，为 Clfont 打开开关后重新执行。本工具不需要「辅助功能」权限。")
+                        helpStep(1, "首次使用：命令行工具与「App 管理」权限",
+                                 "Clfont 的实际操作由一段脚本完成，它依赖 macOS 的 python3，而该组件由 "
+                                 + "Xcode 命令行工具提供。未安装时窗口顶部会出现提示，点击其中的"
+                                 + "「安装命令行工具」按系统引导完成即可，无需下载完整的 Xcode。\n"
+                                 + "此外，修改 Claude 的应用包需要「App 管理」权限，macOS 会在第一次执行"
+                                 + "安装时弹出系统请求，请选择「允许」。若此前误选了「不允许」，请前往"
+                                 + "「系统设置 → 隐私与安全性 → App 管理」，为 Clfont 打开开关后重新执行。"
+                                 + "本工具不需要「辅助功能」权限。")
 
                         helpStep(2, "建议先在测试 Claude 上验证",
                                  "应用修改需要对 Claude 重新签名，正式版的原始签名会因此被替换。为避免对日常"
