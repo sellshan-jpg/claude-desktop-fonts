@@ -228,7 +228,6 @@ clfont --app /path/to/Claude.app install   # 指定其他 Claude 安装位置
 | `gui/ClfontApp.swift` | SwiftUI 图形界面，仅调用命令行工具，不直接操作目标应用 |
 | `gui/render-icon.swift` | 应用图标绘制程序，由构建脚本调用 |
 | `gui/build.sh` | 构建脚本：编译、生成图标、组装 bundle、签名 |
-| `gui/build-debug.sh` | 构建调试版：附带调试面板，可强制各类状态并实时修改界面文案 |
 
 ## 许可证
 

@@ -6,6 +6,97 @@ import AppKit
 // 只调用打包在 bundle 里的 clfont CLI；备份、重打包、重签、冒烟测试、失败回滚
 // 全部由 CLI 负责，GUI 自己不碰 Claude.app 的任何文件。
 
+// MARK: - 文案
+
+/// 界面文案集中在这里，正式版直接取默认值；调试版（-D CLFONT_DEBUG）会额外读取
+/// 一份覆盖文件，可在运行中实时改文案，改完由开发者合并回本文件。
+///
+/// 覆盖文件：~/Library/Application Support/clfont/copy-overrides.json
+final class Copy: ObservableObject {
+    static let shared = Copy()
+
+    static let defaults: [String: String] = [
+        // 文案改动请直接改这里；调试版可实时预览，改完由开发者合并回来。
+        "font.mode.desc": "「标准」不生效时再用「扩展」，会多覆盖一批常见字体",
+        "font.preview.cjk": "字体是沉默的声音",
+        "font.scope.desc": "只换中文最安全；换英文会连同界面文字一起改变",
+        "footer.ops": "安装会先退出该 Claude，全程有完整备份；失败或中途取消都会自动回滚，随时可一键还原。重签名后首次启动可能要求重新授权钥匙串，属正常现象。",
+        "footer.safety": "Clfont 仅在本机修改 Claude 的字体渲染：注入内容只有字体规则，不改动任何网络请求，也不读取账号信息与聊天记录。",
+        "header.subtitle": "使用 Clfont，在 Claude 里安全地使用你喜欢的中英文字体",
+        "help.footer": "本工具仅修改所选的 Claude 应用包，不读取账号与会话数据。",
+        "help.safety.b1": "注入内容仅有字体规则（CSS @font-face），不改动任何网络请求，不伪造客户端身份，也不绕过任何限制或配额。",
+        "help.safety.b2": "不读取、不上传账号信息与聊天记录，全部操作都在本机完成。",
+        "help.safety.b3": "安装前会创建完整备份，任一环节失败或中途取消都会自动回滚，随时可一键还原。",
+        "help.safety.title": "关于安全性",
+        "help.step1.body": "Clfont 的实际操作由一段脚本完成，它依赖 macOS 的 python3，而该组件由 Xcode 命令行工具提供。未安装时窗口顶部会出现提示，点击其中的「安装命令行工具」按系统引导完成即可，无需下载完整的 Xcode。\n此外，修改 Claude 的应用包需要「App 管理」权限，macOS 会在第一次执行安装时弹出系统请求，请选择「允许」。若此前误选了「不允许」，请前往「系统设置 → 隐私与安全性 → App 管理」，为 Clfont 打开开关后重新执行。本工具不需要「辅助功能」权限。",
+        "help.step1.title": "首次使用：命令行工具与「App 管理」权限",
+        "help.step2.body": "应用修改需要对 Claude 重新签名，正式版的原始签名会因此被替换。为避免对日常使用的应用反复改动，建议每次更换字体时先在测试 Claude 上确认效果。测试 Claude 是正式版的完整副本，使用独立的应用标识与配置目录，与正式版互不影响。",
+        "help.step2.title": "建议先在测试 Claude 上验证",
+        "help.step3.body": "「替换范围」决定替换哪种文字。「中文」只改中文字形，界面图标不受影响，也是推荐选项；「英文」与「中英文」会一并改变界面英文的观感，若之后发现个别图标显示异常，请改回「中文」。选定范围后在下方选择对应字体，预览会立即更新。",
+        "help.step3.title": "选择替换范围与字体",
+        "help.step4.body": "确认「测试 Claude」处于选中状态后执行安装，过程约 1 至 2 分钟，期间请勿关闭窗口。",
+        "help.step4.title": "应用到测试 Claude",
+        "help.step5.body": "首次启动时，系统会请求访问钥匙串「Claude Safe Storage」。请输入 Mac 的登录密码（即锁屏密码）并选择「始终允许」。该弹窗可能连续出现多次（实测最多 4 次），每次操作相同，属正常现象；全部允许后，副本会沿用现有登录状态自动进入。\n副本可能显示「为了安全，请重新登录」的提示条，可忽略，无需处理。请仅用它确认字体效果，日常使用仍以正式 Claude 为准。",
+        "help.step5.title": "启动测试 Claude，确认字体效果",
+        "help.step6.body": "效果确认无误后，切换回「正式 Claude」卡片，再次执行安装。",
+        "help.step6.title": "应用到正式 Claude",
+        "help.step7.body": "安装依次执行：退出目标应用 → 创建完整备份 → 重新打包 → 更新完整性哈希 → 重新签名 → 启动验证。任一环节失败或中途取消，都会自动回滚至原始状态并重新验证签名，因此最坏的结果是「未能应用」，而非应用无法启动。",
+        "help.step7.title": "安装流程与失败处理",
+        "help.step8.body": "Claude 自动更新会覆盖已应用的修改。此时状态区域会提示此前的修改可能已被更新覆盖，重新执行一次安装即可。",
+        "help.step8.title": "Claude 更新后需重新应用",
+        "help.step9.body": "如需撤销修改，使用「还原」；若能匹配到当前版本的完整备份，Anthropic 的原始签名会一并恢复。遇到异常时使用「自检」，程序会检查应用完整性、未完成事务、字体、磁盘空间、哈希与签名，结果记录在日志中。",
+        "help.step9.title": "还原与自检",
+        "help.title": "如何使用 Clfont",
+        "target.hint": "建议先在测试 Claude 上确认字体效果，再应用到正式 Claude。",
+        "toolchain.body": "Clfont 的实际操作由一段脚本完成，它依赖 macOS 的 python3，而该组件由 Xcode 命令行工具提供。未安装时无法执行任何修改，你的 Claude 也不会被改动。",
+        "toolchain.install": "安装命令行工具",
+        "toolchain.recheck": "我已安装，重新检测",
+        "toolchain.title": "需要先安装 Xcode 命令行工具",
+    ]
+
+    static var fileURL: URL {
+        URL(fileURLWithPath: NSHomeDirectory()
+            + "/Library/Application Support/clfont/copy-overrides.json")
+    }
+
+    @Published private(set) var overrides: [String: String] = [:]
+
+    private init() { load() }
+
+    func load() {
+        guard let d = try? Data(contentsOf: Self.fileURL),
+              let j = try? JSONSerialization.jsonObject(with: d) as? [String: String]
+        else { overrides = [:]; return }
+        overrides = j
+    }
+
+    func set(_ key: String, _ value: String) {
+        let base = Copy.defaults[key] ?? ""
+        if value == base { overrides.removeValue(forKey: key) }
+        else { overrides[key] = value }
+        save()
+    }
+
+    func reset() { overrides = [:]; save() }
+
+    private func save() {
+        let dir = Self.fileURL.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        if let d = try? JSONSerialization.data(
+            withJSONObject: overrides,
+            options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]) {
+            try? d.write(to: Self.fileURL)
+        }
+    }
+
+    func text(_ key: String) -> String {
+        overrides[key] ?? Copy.defaults[key] ?? key
+    }
+}
+
+/// 取文案。`t("key")`；需要插值的用 `{占位符}`，调用处再 replace。
+func t(_ key: String) -> String { Copy.shared.text(key) }
+
 // MARK: - 设计 tokens
 
 extension Color {
@@ -732,6 +823,13 @@ struct ContentView: View {
     @State private var confirmRestore = false
     @State private var showHelp = false
     @State private var showWhatsNew = false
+#if CLFONT_DEBUG
+    @ObservedObject private var copy = Copy.shared
+    @State private var showDebug = true
+    @State private var dbgToolsMissing = false
+    @State private var dbgBusy = false
+    @State private var dbgSearch = ""
+#endif
     @AppStorage("lastSeenVersion") private var lastSeenVersion = ""
 
     private var appVersion: String {
@@ -755,9 +853,26 @@ struct ContentView: View {
         (NSScreen.main?.visibleFrame.height ?? 800) - 32
     }
 
+    /// 界面实际使用的状态；调试版可被面板强制覆盖
+    private var toolsOK: Bool {
+#if CLFONT_DEBUG
+        m.toolsReady && !dbgToolsMissing
+#else
+        m.toolsReady
+#endif
+    }
+    private var busyNow: Bool {
+#if CLFONT_DEBUG
+        m.busy || dbgBusy
+#else
+        m.busy
+#endif
+    }
+
     private var sheetOpen: Bool { confirmRestore || showHelp || showWhatsNew }
 
-    var body: some View {
+    /// 主界面本体；调试版会在它右侧并排放一个调试面板
+    private var mainColumn: some View {
         // 窗口高度跟着内容走（详情 / 日志就地展开），但不越过屏幕可见区域；
         // 真超出了才让内容自己滚，不然什么都点不到。
         ScrollView {
@@ -777,6 +892,15 @@ struct ContentView: View {
         .overlay { if confirmRestore { restoreSheet } }
         .overlay { if showHelp { helpSheet } }
         .overlay { if showWhatsNew { whatsNewSheet } }
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            mainColumn
+#if CLFONT_DEBUG
+            if showDebug { debugPanel }
+#endif
+        }
         .ignoresSafeArea(edges: .top)
         .onAppear { m.checkTools(); m.loadFonts(); m.loadConfig(); m.refreshAll() }
         .animation(DS.ease24, value: m.target)
@@ -831,19 +955,17 @@ struct ContentView: View {
                     .font(.system(size: 11, weight: .bold)).foregroundStyle(DS.prod)
             }
             VStack(alignment: .leading, spacing: 6) {
-                Text("需要先安装 Xcode 命令行工具")
+                Text(t("toolchain.title"))
                     .font(.system(size: 14, weight: .semibold))
-                Text("Clfont 的实际操作由一段脚本完成，它依赖 macOS 的 python3，"
-                     + "而该组件由 Xcode 命令行工具提供。未安装时无法执行任何修改，"
-                     + "你的 Claude 也不会被改动。")
+                Text(t("toolchain.body"))
                     .font(.system(size: 12.5)).foregroundStyle(.secondary)
                     .lineSpacing(2.5)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 10) {
-                    Button("安装命令行工具") { Toolchain.requestInstall() }
+                    Button(t("toolchain.install")) { Toolchain.requestInstall() }
                         .buttonStyle(.glassProminent).tint(DS.prod)
                         .buttonBorderShape(.capsule)
-                    Button("我已安装，重新检测") { m.checkTools() }
+                    Button(t("toolchain.recheck")) { m.checkTools() }
                         .buttonStyle(.plain)
                         .font(.system(size: 12)).foregroundStyle(DS.accent)
                 }
@@ -861,18 +983,16 @@ struct ContentView: View {
     private var content: some View {
         VStack(alignment: .leading, spacing: 20) {
             appHeader
-            if !m.toolsReady { toolchainNotice }
+            if !toolsOK { toolchainNotice }
             statusCard
             targetGroup
             fontGroup
             actions
-            if m.busy { busyRow }
+            if busyNow { busyRow }
             logSection
             VStack(alignment: .leading, spacing: 5) {
-                Text("Clfont 仅在本机修改 Claude 的字体渲染：注入内容只有字体规则，"
-                     + "不改动任何网络请求，也不读取账号信息与聊天记录。")
-                Text("安装会先退出该 Claude，全程有完整备份；失败或中途取消都会自动回滚，"
-                     + "随时可一键还原。重签名后首次启动可能要求重新授权钥匙串，属正常现象。")
+                Text(t("footer.safety"))
+                Text(t("footer.ops"))
             }
             .font(.system(size: 11.5))
             .foregroundStyle(.secondary)
@@ -896,7 +1016,7 @@ struct ContentView: View {
                 Text("Clfont")
                     .font(.system(size: 17, weight: .semibold))
                     .tracking(-0.17)
-                Text("使用 Clfont，在 Claude 里安全地使用你喜欢的中英文字体")
+                Text(t("header.subtitle"))
                     .font(.system(size: 13)).foregroundStyle(.secondary)
             }
             Spacer()
@@ -1056,7 +1176,7 @@ struct ContentView: View {
                 targetTile(.production)
                 targetTile(.testCopy)
             }
-            Text("建议先在测试 Claude 上确认字体效果，再应用到正式 Claude。")
+            Text(t("target.hint"))
                 .font(.system(size: 11.5)).foregroundStyle(.secondary)
                 .padding(.leading, 4)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1127,7 +1247,7 @@ struct ContentView: View {
                 HStack(spacing: 16) {
                     VStack(alignment: .leading, spacing: 1) {
                         Text("替换范围").font(.system(size: 14))
-                        Text("只换中文最安全；换英文会连同界面文字一起改变")
+                        Text(t("font.scope.desc"))
                             .font(.system(size: 12)).foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -1168,7 +1288,7 @@ struct ContentView: View {
                 HStack(spacing: 16) {
                     VStack(alignment: .leading, spacing: 1) {
                         Text("兼容模式").font(.system(size: 14))
-                        Text("「标准」不生效时再用「扩展」，会多覆盖一批常见字体")
+                        Text(t("font.mode.desc"))
                             .font(.system(size: 12)).foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -1196,7 +1316,7 @@ struct ContentView: View {
     /// 预览按分组分别用各自的字体渲染，没被替换的那部分保持系统字体，
     /// 所见即所得。
     private var previewLine: some View {
-        let cjk = Text("字体是沉默的声音")
+        let cjk = Text(t("font.preview.cjk"))
             .font(m.replacesCJK ? .custom(m.fontFamily, size: 20) : .system(size: 20))
         let latin = Text("  ABCDE abcde 1234567890")
             .font(m.replacesLatin && !m.fontLatin.isEmpty
@@ -1238,7 +1358,7 @@ struct ContentView: View {
                 .buttonStyle(.glassProminent).tint(DS.accent)
                 .buttonBorderShape(.capsule)
                 .keyboardShortcut(.defaultAction)
-                .disabled(m.busy || !m.exists(m.target) || !m.toolsReady)
+                .disabled(busyNow || !m.exists(m.target) || !toolsOK)
 
                 Button { m.doctor() } label: {
                     Text("自检").font(.system(size: 14))
@@ -1246,7 +1366,7 @@ struct ContentView: View {
                 }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.capsule)
-                .disabled(m.busy || !m.exists(m.target) || !m.toolsReady)
+                .disabled(busyNow || !m.exists(m.target) || !toolsOK)
 
                 Button { m.openTarget() } label: {
                     Text("打开").font(.system(size: 14))
@@ -1254,10 +1374,10 @@ struct ContentView: View {
                 }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.capsule)
-                .disabled(m.busy || !m.exists(m.target) || !m.toolsReady)
+                .disabled(busyNow || !m.exists(m.target) || !toolsOK)
 
                 DestructiveButton(title: "还原") { confirmRestore = true }
-                    .disabled(m.busy || !m.exists(m.target) || !m.toolsReady)
+                    .disabled(busyNow || !m.exists(m.target) || !toolsOK)
             }
         }
         .padding(.top, 2)
@@ -1371,12 +1491,10 @@ struct ContentView: View {
                     .foregroundStyle(DS.success)
             }
             VStack(alignment: .leading, spacing: 6) {
-                Text("关于安全性").font(.system(size: 14, weight: .semibold))
-                bullet("注入内容仅有字体规则（CSS @font-face），不改动任何网络请求，"
-                       + "不伪造客户端身份，也不绕过任何限制或配额。")
-                bullet("不读取、不上传账号信息与聊天记录，全部操作都在本机完成。")
-                bullet("安装前会创建完整备份，任一环节失败或中途取消都会自动回滚，"
-                       + "随时可一键还原。")
+                Text(t("help.safety.title")).font(.system(size: 14, weight: .semibold))
+                bullet(t("help.safety.b1"))
+                bullet(t("help.safety.b2"))
+                bullet(t("help.safety.b3"))
             }
         }
         .padding(14)
@@ -1416,7 +1534,7 @@ struct ContentView: View {
 
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
-                    Text("如何使用 Clfont")
+                    Text(t("help.title"))
                         .font(.system(size: 17, weight: .semibold)).tracking(-0.17)
                     Spacer()
                     Button { showHelp = false } label: {
@@ -1432,29 +1550,15 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 20) {
                         safetyNote
 
-                        helpStep(1, "首次使用：命令行工具与「App 管理」权限",
-                                 "Clfont 的实际操作由一段脚本完成，它依赖 macOS 的 python3，而该组件由 "
-                                 + "Xcode 命令行工具提供。未安装时窗口顶部会出现提示，点击其中的"
-                                 + "「安装命令行工具」按系统引导完成即可，无需下载完整的 Xcode。\n"
-                                 + "此外，修改 Claude 的应用包需要「App 管理」权限，macOS 会在第一次执行"
-                                 + "安装时弹出系统请求，请选择「允许」。若此前误选了「不允许」，请前往"
-                                 + "「系统设置 → 隐私与安全性 → App 管理」，为 Clfont 打开开关后重新执行。"
-                                 + "本工具不需要「辅助功能」权限。")
+                        helpStep(1, t("help.step1.title"), t("help.step1.body"))
 
-                        helpStep(2, "建议先在测试 Claude 上验证",
-                                 "应用修改需要对 Claude 重新签名，正式版的原始签名会因此被替换。为避免对日常"
-                                 + "使用的应用反复改动，建议每次更换字体时先在测试 Claude 上确认效果。测试 "
-                                 + "Claude 是正式版的完整副本，使用独立的应用标识与配置目录，与正式版互不影响。") {
+                        helpStep(2, t("help.step2.title"), t("help.step2.body")) {
                             ActionLine(lead: "在「测试 Claude」卡片上，点击", tail: "，约需 1 分钟") {
                                 BtnChip(title: "创建测试 Claude", kind: .link)
                             }
                         }
 
-                        helpStep(3, "选择替换范围与字体",
-                                 "「替换范围」决定替换哪种文字。「中文」只改中文字形，界面图标不受影响，"
-                                 + "也是推荐选项；「英文」与「中英文」会一并改变界面英文的观感，若之后发现"
-                                 + "个别图标显示异常，请改回「中文」。选定范围后在下方选择对应字体，"
-                                 + "预览会立即更新。") {
+                        helpStep(3, t("help.step3.title"), t("help.step3.body")) {
                             VStack(alignment: .leading, spacing: 6) {
                                 ActionLine(lead: "替换范围") {
                                     SegChip(options: ["中文", "英文", "中英文"], selected: 0)
@@ -1465,40 +1569,23 @@ struct ContentView: View {
                             }
                         }
 
-                        helpStep(4, "应用到测试 Claude",
-                                 "确认「测试 Claude」处于选中状态后执行安装，过程约 1 至 2 分钟，"
-                                 + "期间请勿关闭窗口。") {
+                        helpStep(4, t("help.step4.title"), t("help.step4.body")) {
                             ActionLine(lead: "点击") { BtnChip(title: "应用到测试 Claude", kind: .primary) }
                         }
 
-                        helpStep(5, "启动测试 Claude，确认字体效果",
-                                 "首次启动时，系统会请求访问钥匙串「Claude Safe Storage」。请输入 Mac 的"
-                                 + "登录密码（即锁屏密码）并选择「始终允许」。该弹窗可能连续出现多次"
-                                 + "（实测最多 4 次），每次操作相同，属正常现象；全部允许后，副本会沿用"
-                                 + "现有登录状态自动进入。\n"
-                                 + "副本可能显示「为了安全，请重新登录」的提示条，可忽略，无需处理。"
-                                 + "请仅用它确认字体效果，日常使用仍以正式 Claude 为准。") {
+                        helpStep(5, t("help.step5.title"), t("help.step5.body")) {
                             ActionLine(lead: "点击") { BtnChip(title: "打开", kind: .glass) }
                         }
 
-                        helpStep(6, "应用到正式 Claude",
-                                 "效果确认无误后，切换回「正式 Claude」卡片，再次执行安装。") {
+                        helpStep(6, t("help.step6.title"), t("help.step6.body")) {
                             ActionLine(lead: "点击") { BtnChip(title: "应用到正式 Claude", kind: .primary) }
                         }
 
-                        helpStep(7, "安装流程与失败处理",
-                                 "安装依次执行：退出目标应用 → 创建完整备份 → 重新打包 → 更新完整性哈希 → "
-                                 + "重新签名 → 启动验证。任一环节失败或中途取消，都会自动回滚至原始状态并重新"
-                                 + "验证签名，因此最坏的结果是「未能应用」，而非应用无法启动。")
+                        helpStep(7, t("help.step7.title"), t("help.step7.body"))
 
-                        helpStep(8, "Claude 更新后需重新应用",
-                                 "Claude 自动更新会覆盖已应用的修改。此时状态区域会提示此前的修改可能已被"
-                                 + "更新覆盖，重新执行一次安装即可。")
+                        helpStep(8, t("help.step8.title"), t("help.step8.body"))
 
-                        helpStep(9, "还原与自检",
-                                 "如需撤销修改，使用「还原」；若能匹配到当前版本的完整备份，Anthropic 的原始"
-                                 + "签名会一并恢复。遇到异常时使用「自检」，程序会检查应用完整性、未完成事务、"
-                                 + "字体、磁盘空间、哈希与签名，结果记录在日志中。") {
+                        helpStep(9, t("help.step9.title"), t("help.step9.body")) {
                             ActionLine(lead: "点击") {
                                 HStack(spacing: 6) {
                                     BtnChip(title: "还原", kind: .danger)
@@ -1514,7 +1601,7 @@ struct ContentView: View {
                 Divider().opacity(0.5)
 
                 HStack {
-                    Text("本工具仅修改所选的 Claude 应用包，不读取账号与会话数据。")
+                    Text(t("help.footer"))
                         .font(.system(size: 11.5)).foregroundStyle(.secondary)
                     Spacer()
                     Button("知道了") { showHelp = false }

@@ -1,3 +1,7 @@
 build/
 .DS_Store
 *.iconset
+
+# 调试工具：不进仓库
+gui/DebugPanel.swift
+gui/build-debug.sh
