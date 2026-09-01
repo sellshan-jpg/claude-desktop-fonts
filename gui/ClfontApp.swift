@@ -48,6 +48,35 @@ private struct GroupLabel: View {
     }
 }
 
+// MARK: - 更新说明
+
+/// 面向用户的更新说明：只说「改了什么」和「你要做什么」，不堆术语。
+struct ReleaseNote: Identifiable {
+    let version: String
+    let changes: [String]
+    /// 需要用户配合的动作；没有就留空
+    let action: String?
+    var id: String { version }
+}
+
+let releaseNotes: [ReleaseNote] = [
+    ReleaseNote(
+        version: "5.1",
+        changes: [
+            "修复替换英文时，侧边栏、输入框等区域字体不跟随变化的问题。",
+            "修复 Claude 思考过程文本字体偶发不跟随变化的问题。",
+        ],
+        action: "若此前已为 Claude 应用过字体，需重新执行一次「应用」，本次修复方可生效。"),
+    ReleaseNote(
+        version: "5.0",
+        changes: [
+            "支持替换中文、英文或中英文，中英文字体可分别指定。",
+            "提供测试 Claude，可在改动日常使用的应用之前先确认效果。",
+            "支持随时还原，并在备份可用时一并恢复 Claude 的原始签名。",
+        ],
+        action: nil),
+]
+
 // MARK: - 开发者工具
 
 enum Toolchain {
@@ -702,6 +731,20 @@ struct ContentView: View {
     @State private var logOpen = false
     @State private var confirmRestore = false
     @State private var showHelp = false
+    @State private var showWhatsNew = false
+    @AppStorage("lastSeenVersion") private var lastSeenVersion = ""
+
+    private var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+    }
+    /// 版本变过、且这一版的说明还没看过时，图标上点一个小红点
+    private var hasUnseenNotes: Bool {
+        !appVersion.isEmpty && lastSeenVersion != appVersion
+    }
+    private func openWhatsNew() {
+        showWhatsNew = true
+        lastSeenVersion = appVersion
+    }
     @State private var confirmRebuild = false
     @State private var confirmRemove = false
     /// 内容实测高度；初值取收起态的大致高度，免得首帧窗口先小后大跳一下
@@ -712,7 +755,7 @@ struct ContentView: View {
         (NSScreen.main?.visibleFrame.height ?? 800) - 32
     }
 
-    private var sheetOpen: Bool { confirmRestore || showHelp }
+    private var sheetOpen: Bool { confirmRestore || showHelp || showWhatsNew }
 
     var body: some View {
         // 窗口高度跟着内容走（详情 / 日志就地展开），但不越过屏幕可见区域；
@@ -733,6 +776,7 @@ struct ContentView: View {
         .background { backdrop.frame(height: 1400) }
         .overlay { if confirmRestore { restoreSheet } }
         .overlay { if showHelp { helpSheet } }
+        .overlay { if showWhatsNew { whatsNewSheet } }
         .ignoresSafeArea(edges: .top)
         .onAppear { m.checkTools(); m.loadFonts(); m.loadConfig(); m.refreshAll() }
         .animation(DS.ease24, value: m.target)
@@ -746,6 +790,7 @@ struct ContentView: View {
         .animation(DS.pop, value: logOpen)
         .animation(DS.pop, value: confirmRestore)
         .animation(DS.pop, value: showHelp)
+        .animation(DS.pop, value: showWhatsNew)
         .alert("彻底删除测试 Claude？", isPresented: $confirmRemove) {
             Button("取消", role: .cancel) {}
             Button("删除", role: .destructive) { m.removeTestCopy() }
@@ -855,16 +900,36 @@ struct ContentView: View {
                     .font(.system(size: 13)).foregroundStyle(.secondary)
             }
             Spacer()
-            Button { showHelp = true } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "questionmark.circle")
-                        .font(.system(size: 13, weight: .medium))
-                    Text("如何使用").font(.system(size: 13))
+            HStack(spacing: 16) {
+                Button { openWhatsNew() } label: {
+                    HStack(spacing: 5) {
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 13, weight: .medium))
+                            if hasUnseenNotes {
+                                Circle().fill(DS.prod)
+                                    .frame(width: 5, height: 5)
+                                    .offset(x: 4, y: -2)
+                            }
+                        }
+                        Text("新特性").font(.system(size: 13))
+                    }
+                    .contentShape(Rectangle())
                 }
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .foregroundStyle(DS.accent)
+
+                Button { showHelp = true } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "questionmark.circle")
+                            .font(.system(size: 13, weight: .medium))
+                        Text("如何使用").font(.system(size: 13))
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(DS.accent)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(DS.accent)
         }
     }
 
@@ -1458,6 +1523,89 @@ struct ContentView: View {
                 .padding(.horizontal, 24).padding(.vertical, 14)
             }
             .frame(width: 560)
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .shadow(color: .black.opacity(0.3), radius: 25, y: 22)
+            .transition(.scale(scale: 0.96).combined(with: .opacity))
+        }
+    }
+
+    // MARK: 新特性
+
+    private func noteBlock(_ n: ReleaseNote) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text("版本 \(n.version)").font(.system(size: 14, weight: .semibold))
+                if n.version == appVersion {
+                    Text("当前版本")
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundStyle(DS.accent)
+                        .padding(.horizontal, 7).padding(.vertical, 2)
+                        .background(Capsule().fill(DS.accent.opacity(0.12)))
+                }
+            }
+            VStack(alignment: .leading, spacing: 5) {
+                ForEach(Array(n.changes.enumerated()), id: \.offset) { _, c in
+                    bullet(c)
+                }
+            }
+            if let a = n.action {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "hand.point.right.fill")
+                        .font(.system(size: 11)).foregroundStyle(DS.prod)
+                        .padding(.top, 2)
+                    Text(a)
+                        .font(.system(size: 12.5, weight: .medium))
+                        .lineSpacing(2.5)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(DS.prod.opacity(0.09)))
+            }
+        }
+    }
+
+    private var whatsNewSheet: some View {
+        ZStack {
+            scrim { showWhatsNew = false }
+
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    HStack(spacing: 7) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(DS.accent)
+                        Text("新特性").font(.system(size: 17, weight: .semibold)).tracking(-0.17)
+                    }
+                    Spacer()
+                    Button { showWhatsNew = false } label: {
+                        Image(systemName: "xmark").font(.system(size: 12, weight: .semibold))
+                    }
+                    .buttonStyle(.plain).foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 24).padding(.top, 22).padding(.bottom, 16)
+
+                Divider().opacity(0.5)
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 22) {
+                        ForEach(releaseNotes) { noteBlock($0) }
+                    }
+                    .padding(.horizontal, 24).padding(.vertical, 20)
+                }
+                .frame(maxHeight: 380)
+
+                Divider().opacity(0.5)
+
+                HStack {
+                    Spacer()
+                    Button("知道了") { showWhatsNew = false }
+                        .buttonStyle(.glassProminent).tint(DS.accent).controlSize(.large)
+                }
+                .padding(.horizontal, 24).padding(.vertical, 14)
+            }
+            .frame(width: 520)
             .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .shadow(color: .black.opacity(0.3), radius: 25, y: 22)
             .transition(.scale(scale: 0.96).combined(with: .opacity))
