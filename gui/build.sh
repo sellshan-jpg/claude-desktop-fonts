@@ -45,8 +45,8 @@ cat > "$OUT/Contents/Info.plist" <<'PLIST'
   <key>CFBundleExecutable</key><string>clfont-gui</string>
   <key>CFBundleIconFile</key><string>Clfont</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>5.0</string>
-  <key>CFBundleVersion</key><string>5</string>
+  <key>CFBundleShortVersionString</key><string>5.1</string>
+  <key>CFBundleVersion</key><string>6</string>
   <key>LSMinimumSystemVersion</key><string>26.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>

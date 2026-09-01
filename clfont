@@ -657,8 +657,16 @@ def build_css(mode, cfg):
 
 def build_preload_injection(css):
     """构造追加到 preload(mainView.js) 尾部的自包含 IIFE：把上面 CSS 作为
-    <style> 塞进远程页面的 DOM。全程 try/catch，绝不可能让 preload 抛错；
-    CSS 以 base64 携带，杜绝任何引号/反引号转义问题。"""
+    <style> 塞进远程页面的 DOM，并**始终保持在 head 末尾**。
+
+    为什么要保持在末尾：同名家族有多条 @font-face 时，重叠码位上后声明的胜出。
+    claude.ai 是 SPA，会在运行中懒加载 CSS chunk，那些 chunk 里同样声明了
+    anthropic-sans/serif。如果只插一次就不管，后来的声明会把我们在**拉丁码位**
+    上的覆盖赢回去（中文不受影响，因为它们的字体本来就没有中文字形——这正是
+    「中文生效、英文不生效」和「思考过程文本有时候不变」的原因）。
+
+    全程 try/catch，绝不可能让 preload 抛错；CSS 以 base64 携带，杜绝任何
+    引号/反引号转义问题。"""
     b64 = base64.b64encode(css.encode("utf-8")).decode("ascii")
     return (
         f'\n;/* {MARKER} */(function(){{try{{'
@@ -666,19 +674,27 @@ def build_preload_injection(css):
         'var CSS=(function(){try{var s=atob(B),a=new Uint8Array(s.length);'
         'for(var i=0;i<s.length;i++)a[i]=s.charCodeAt(i);'
         "return new TextDecoder('utf-8').decode(a);}catch(e){return atob(B);}})();"
-        f'var ID="{MARKER}";'
-        'function inj(){try{if(typeof document==="undefined")return;'
-        'if(document.getElementById(ID))return;'
-        'var st=document.createElement("style");st.id=ID;'
-        'st.setAttribute("data-clfont","1");st.textContent=CSS;'
-        'var r=document.head||document.documentElement;if(r)r.appendChild(st);}'
+        f'var ID="{MARKER}";var st=null,ob=null;'
+        'function ensure(){try{if(typeof document==="undefined")return;'
+        'var r=document.head||document.documentElement;if(!r)return;'
+        'if(!st||!st.isConnected){st=document.getElementById(ID);}'
+        'if(!st){st=document.createElement("style");st.id=ID;'
+        'st.setAttribute("data-clfont","1");st.textContent=CSS;}'
+        # 已经在末尾就什么都不做；否则移到末尾。移动本身会再触发一次观察器
+        # 回调，那次检查会发现已在末尾而停下，不会形成死循环。
+        'if(r.lastElementChild!==st)r.appendChild(st);'
+        'if(!ob&&typeof MutationObserver!=="undefined"){'
+        'ob=new MutationObserver(function(){ensure();});'
+        'ob.observe(r,{childList:true});}}'
         'catch(e){}}'
-        'inj();'
-        'try{if(typeof document!=="undefined"&&document.addEventListener)'
-        'document.addEventListener("DOMContentLoaded",inj);}catch(e){}'
+        'ensure();'
+        'try{if(typeof document!=="undefined"&&document.addEventListener){'
+        'document.addEventListener("DOMContentLoaded",ensure);'
+        'document.addEventListener("load",ensure,true);}}catch(e){}'
+        'try{if(typeof setInterval!=="undefined"){var n=0;var t=setInterval(function(){'
+        'ensure();if(++n>40&&t){clearInterval(t);t=null;}},500);}}catch(e){}'
         '}catch(e){}})();\n'
     )
-
 
 
 # ---------------------------------------------------------------- 打补丁
