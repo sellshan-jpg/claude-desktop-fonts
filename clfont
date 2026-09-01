@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+#
+# Copyright © 2026 赵万 (Jovan)
+# 依 PolyForm Noncommercial License 1.0.0 授权，仅限非商业用途。详见 LICENSE。
 """
 clfont — Claude Desktop 中文字体补丁工具（macOS, Apple Silicon）v4
 

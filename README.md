@@ -5,9 +5,9 @@ Clfont 是一款 macOS 工具，用于替换 Claude 桌面版界面中的字体�
 
 > **声明**
 >
-> 本项目为第三方开源工具，与 Anthropic 无任何隶属或合作关系。使用时会修改本机
-> 安装的 Claude.app，并变更其代码签名。请在使用前完整阅读
-> [代码签名的影响](#代码签名的影响) 一节。
+> 本项目为第三方工具，与 Anthropic 无任何隶属或合作关系。源码公开以供查证，
+> 采用非商业许可（见[许可证](#许可证)）。使用时会修改本机安装的 Claude.app，
+> 并变更其代码签名，请在使用前完整阅读[代码签名的影响](#代码签名的影响)一节。
 
 ## 目录
 
@@ -228,7 +228,19 @@ clfont --app /path/to/Claude.app install   # 指定其他 Claude 安装位置
 | `gui/ClfontApp.swift` | SwiftUI 图形界面，仅调用命令行工具，不直接操作目标应用 |
 | `gui/render-icon.swift` | 应用图标绘制程序，由构建脚本调用 |
 | `gui/build.sh` | 构建脚本：编译、生成图标、组装 bundle、签名 |
+| `gui/build-debug.sh` | 构建调试版：附带调试面板，可强制各类状态并实时修改界面文案 |
 
 ## 许可证
 
-[MIT](LICENSE)
+Copyright © 2026 赵万 (Jovan)。本项目采用
+[PolyForm Noncommercial License 1.0.0](LICENSE)，为源码公开（source-available）
+而非开源许可，要点如下：
+
+- **个人与非商业用途免费**，包括个人研究、学习与自用。
+- **禁止任何商业用途**，包括但不限于收费分发、内置于付费产品、或用于营利性组织
+  的业务活动。
+- 允许查看、修改与再分发，但**必须保留本许可证与版权声明**，且再分发同样受
+  非商业限制约束。
+
+以许可证原文为准。若需商业授权，请通过
+[Issues](https://github.com/sellshan-jpg/clfont/issues) 联系。
