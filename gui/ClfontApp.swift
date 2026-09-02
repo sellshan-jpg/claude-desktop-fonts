@@ -2355,7 +2355,10 @@ struct ContentView: View {
                     }
                     .frame(maxHeight: 150)
                     .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .onChange(of: m.log) { _, _ in sp.scrollTo("end", anchor: .bottom) }
+                    .onChange(of: m.log) { _, _ in
+                        // 同上：延到下一个 runloop，否则总是差最后一行
+                        DispatchQueue.main.async { sp.scrollTo("end", anchor: .bottom) }
+                    }
                 }
             }
         }
@@ -2716,9 +2719,8 @@ struct ContentView: View {
                     .frame(height: 190)
                     .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(Color.secondary.opacity(0.08)))
-                    .onChange(of: m.log) { _, _ in
-                        withAnimation(.easeOut(duration: 0.15)) { sp.scrollTo("tail", anchor: .bottom) }
-                    }
+                    .onAppear { scrollToTail(sp) }
+                    .onChange(of: m.log) { _, _ in scrollToTail(sp) }
                 }
 
                 Text(t("sheet.applying.hint"))
@@ -2771,6 +2773,14 @@ struct ContentView: View {
         }
     }
 
+
+    /// 滚到日志末尾。必须放到下一个 runloop：onChange 触发时新行还没参与布局，
+    /// 此刻滚动用的是加行之前的高度，结果就是永远差最后一行。
+    private func scrollToTail(_ sp: ScrollViewProxy) {
+        DispatchQueue.main.async {
+            withAnimation(.easeOut(duration: 0.15)) { sp.scrollTo("tail", anchor: .bottom) }
+        }
+    }
 
     /// 这次应用会动到哪些东西，按实际选择列出。写死一句「字体和/或底色」等于
     /// 让用户自己去核对选了什么，不如直接把清单摆出来。
