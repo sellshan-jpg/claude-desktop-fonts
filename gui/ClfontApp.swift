@@ -8,14 +8,37 @@ import AppKit
 
 // MARK: - 文案
 
-/// 界面文案集中在这里，正式版直接取默认值；调试版（-D CLFONT_DEBUG）会额外读取
-/// 一份覆盖文件，可在运行中实时改文案，改完由开发者合并回本文件。
+/// 界面语言。auto 跟随系统：系统首选语言以 zh 开头用中文，其余一律英文。
+enum Lang: String, CaseIterable, Identifiable {
+    case auto, zh, en
+    var id: String { rawValue }
+
+    /// 实际生效的语言（把 auto 解析掉）
+    static func resolve(_ l: Lang) -> Lang {
+        guard l == .auto else { return l }
+        return (Locale.preferredLanguages.first ?? "en").hasPrefix("zh") ? .zh : .en
+    }
+}
+
+/// 界面文案集中在这里。中文是基准表：英文表缺哪一条就回落到中文，不会出现
+/// 空字符串或 key 泄漏到界面上。
 ///
-/// 覆盖文件：~/Library/Application Support/clfont/copy-overrides.json
+/// 调试版（-D CLFONT_DEBUG）会额外读取一份覆盖文件，可在运行中实时改文案，
+/// 改完由开发者合并回本文件。覆盖文件：
+/// ~/Library/Application Support/clfont/copy-overrides.json
 final class Copy: ObservableObject {
     static let shared = Copy()
 
-    static let defaults: [String: String] = [
+    /// 语言切换要让整个界面重画，所以放在这里当发布源，而不是各视图各读一份
+    @Published var lang: Lang = Lang(rawValue:
+        UserDefaults.standard.string(forKey: "uiLanguage") ?? "auto") ?? .auto {
+        didSet { UserDefaults.standard.set(lang.rawValue, forKey: "uiLanguage") }
+    }
+
+    var effective: Lang { Lang.resolve(lang) }
+
+    /// 中文是基准表；改文案请直接改这里。
+    static let zh: [String: String] = [
         // 文案改动请直接改这里；调试版可实时预览，改完由开发者合并回来。
         "font.mode.desc": "「标准」不生效时再用「扩展」，会多覆盖一批常见字体",
         "font.preview.cjk": "字体是沉默的声音",
@@ -65,6 +88,298 @@ final class Copy: ObservableObject {
         "stale.title": "Claude 已更新，此前应用的字体已失效",
         "helper.body": "早期版本的 Clfont 在重新签名时会一并清除 Claude 内部组件的系统权限，导致 Cowork、虚拟机等功能不可用。重新应用一次，程序会从完整备份还原后再进行修改；若没有可用备份，请重新下载安装 Claude。",
         "helper.title": "检测到早期版本遗留的权限缺失",
+
+        // —— 主界面
+        "header.whatsnew": "新特性",
+        "header.help": "如何使用",
+        "target.prod": "正式 Claude",
+        "target.test": "测试 Claude",
+        "target.none": "尚未创建，点击右上角创建",
+        "target.title": "选择需要更换字体的 Claude 版本",
+        "target.create": "创建测试 Claude",
+        "target.rebuild": "重建",
+        "target.delete": "删除",
+
+        // —— 状态卡
+        "status.missing": "找不到这个 Claude",
+        "status.loading": "读取中…",
+        "status.applied": "已应用 {font}",
+        "status.font": "字体",
+        "status.stale": "字体当前未生效",
+        "status.none": "尚未应用，随时可以撤回",
+        "status.detail": "详情",
+        "status.collapse": "收起",
+        "status.backedup": "已备份",
+        "status.nobackup": "未备份",
+        "status.checked": "{time} 检查",
+        "detail.integrity": "asar 完整性",
+        "detail.match": "匹配",
+        "detail.mismatch": "不匹配",
+        "detail.pass": "通过",
+        "detail.fail": "未通过",
+        "detail.backups": "整包备份",
+        "detail.none": "无",
+        "detail.count": "{n} 份",
+        "detail.disk": "磁盘剩余",
+        "detail.usage": "备份占用",
+        "detail.prune": "清理 {n} 份旧备份",
+        "detail.keepall": "均需保留",
+
+        // —— 字体设置
+        "font.group": "字体",
+        "font.scope": "替换范围",
+        "font.scope.cjk": "中文",
+        "font.scope.latin": "英文",
+        "font.scope.both": "中英文",
+        "font.cjk": "中文字体",
+        "font.cjk.size": "中文字号",
+        "font.latin": "英文字体",
+        "font.latin.size": "英文字号",
+        "font.mode": "兼容模式",
+        "font.mode.std": "标准",
+        "font.mode.ext": "扩展",
+        "font.preview.label": "预览",
+        "font.reset": "恢复 100%",
+        "font.sample": "字A",
+
+        // —— 按钮
+        "action.apply": "应用到{target}",
+        "action.reapply": "重新应用到{target}",
+        "action.doctor": "自检",
+        "action.open": "打开",
+        "action.restore": "还原",
+
+        // —— 日志
+        "log.show": "显示日志（{n}）",
+        "log.hide": "隐藏日志",
+        "log.clear": "清除日志",
+        "log.cleared": "日志已清除",
+        "log.guard": "备份保护中，失败自动回滚",
+
+        // —— 进度提示
+        "busy.status": "读取{target}状态",
+        "busy.install": "安装到「{target}」：备份 → 重打包 → 重签名 → 启动测试（约 1–2 分钟）",
+        "busy.uninstall": "还原「{target}」：恢复原文件 → 重签名",
+        "busy.doctor": "自检「{target}」",
+        "busy.prune": "清理旧备份",
+        "busy.create": "创建测试副本：复制 → 换独立身份 → 重签名 → 播种登录态",
+        "busy.remove": "移除测试 Claude：删除副本、配置目录与它的备份",
+        "msg.clifail": "✗ 启动 CLI 失败：{err}",
+        "msg.noscript": "✗ 找不到 {name}",
+        "msg.opened": "· 已启动测试 Claude（独立配置目录）",
+        "msg.openfail": "✗ 启动测试 Claude 失败：{err}",
+
+        // —— 弹层
+        "sheet.cancel": "取消",
+        "sheet.ok": "知道了",
+        "sheet.delete.title": "彻底删除测试 Claude？",
+        "sheet.delete.ok": "删除",
+        "sheet.delete.body": "将删除测试 Claude 的应用副本、它的配置目录，以及它在 clfont 数据目录中的整包备份，可释放约 1 GB 空间。\n\n正式 Claude 及其备份不受影响。之后仍可随时重新创建。",
+        "sheet.create.title": "创建测试 Claude？",
+        "sheet.create.ok": "创建",
+        "sheet.create.body": "将从正式 Claude 复制一份副本，替换为独立的应用标识，并把当前的登录状态复制过去，因此无需重新登录。副本使用独立的配置目录，在其上进行的任何操作都不会影响正式 Claude。\n\n若副本已存在，将被删除后重新创建。",
+        "sheet.restore.title": "确认还原 Claude 字体？",
+        "sheet.restore.body": "会从备份恢复{target}的 app.asar 并重新签名，当前的{font}设置将被移除。Claude 需要退出后重新打开。",
+        "sheet.restore.backup": "备份 {name}",
+        "sheet.restore.nobackup": "没有整包备份，将用 app.asar.bak 原版留底还原",
+
+        // —— 更新
+        "update.check": "检查更新",
+        "update.title": "Clfont {tag} 可供下载",
+        "update.norepo": "还没上架 GitHub，暂时没有可检查的版本。",
+        "update.found": "有新版本 {tag}。",
+        "update.latest": "已是最新版本。",
+        "update.norelease": "仓库里还没有发布任何版本。",
+        "update.failed": "检查失败：{why}",
+        "update.err.norepo": "仓库地址没配置",
+        "update.err.rate": "GitHub 限流了，过一会儿再试",
+        "update.err.code": "GitHub 返回 {code}",
+        "update.err.parse": "发布信息解析失败",
+
+        // —— 关于 / 新特性
+        "about.title": "关于 Clfont",
+        "about.version": "版本 {v}（{b}）",
+        "about.tagline": "替换 Claude 桌面版界面的显示字体，支持中文、英文或中英文",
+        "about.dev": "开发者",
+        "about.devname": "赵万（Jovan）",
+        "about.footer": "仅修改本机安装的 Claude 应用包，不读取账号与会话数据",
+        "about.lang": "界面语言",
+        "about.lang.auto": "跟随系统",
+        "release.version": "版本 {v}",
+        "release.current": "当前版本",
+
+        // —— 教程里的操作行
+        "help.a2.lead": "在「测试 Claude」卡片上，点击",
+        "help.a2.tail": "，约需 1 分钟",
+        "help.a4.lead": "点击",
+        "help.a3.tail": "不生效时再改用「扩展」",
+    ]
+
+    /// 英文表。缺的条目自动回落到中文，所以不必强求逐条对齐。
+    static let en: [String: String] = [
+        "font.mode.desc": "Try Extended only if Standard leaves some text unchanged",
+        "font.preview.cjk": "字体是沉默的声音",
+        "font.scope.desc": "Chinese only is safest; English also restyles the interface",
+        "footer.ops": "Applying quits that copy of Claude first and always takes a full backup. If any step fails or you cancel, the files are put back exactly as they were, and Restore undoes everything at any time. macOS may ask for keychain access the first time Claude starts afterwards — that is expected.",
+        "footer.safety": "Clfont only changes how Claude renders text on this Mac. It injects font rules and nothing else: no network requests are altered, and no account details or conversations are read.",
+        "header.subtitle": "Use the fonts you like in Claude — safely",
+        "help.footer": "Clfont only modifies the Claude app bundle you select. It never reads your account or conversations.",
+        "help.safety.b1": "The only thing injected is font rules (CSS @font-face). No network requests are altered, no client identity is forged, and no limit or quota is bypassed.",
+        "help.safety.b2": "No account details or conversations are read or uploaded. Everything happens on this Mac.",
+        "help.safety.b3": "A full backup is taken before any change. If a step fails or you cancel, the files are put back as they were, and Restore undoes everything at any time.",
+        "help.safety.title": "About safety",
+        "help.step1.body": "Clfont's actual work is done by a script that needs macOS's python3, which ships with the Xcode Command Line Tools. If they are missing, a notice appears at the top of the window — click Install Command Line Tools and follow the system prompt. The full Xcode is not required.\nModifying Claude's app bundle also needs the App Management permission. macOS asks for it the first time you apply; choose Allow. If you previously chose Don't Allow, open System Settings → Privacy & Security → App Management, turn Clfont on, and try again. Clfont does not need Accessibility permission.",
+        "help.step1.title": "First run: command line tools and App Management",
+        "help.step2.body": "Applying fonts requires re-signing Claude, which replaces its original signature. To avoid repeatedly modifying the app you use every day, confirm each font choice on the test Claude first. The test Claude is a full copy with its own app identity and its own profile directory, fully isolated from the real one.",
+        "help.step2.title": "Try it on the test Claude first",
+        "help.step3.body": "Scope decides which text is replaced. Chinese changes Chinese glyphs only and leaves interface icons untouched — this is the recommended choice. English and Both also change how the interface reads; if any icon later looks wrong, switch back to Chinese. Pick your fonts below and the preview updates immediately.",
+        "help.step3.title": "Choose scope and fonts",
+        "help.step4.body": "Make sure Test Claude is selected, then apply. It takes one to two minutes — leave the window open.",
+        "help.step4.title": "Apply to the test Claude",
+        "help.step5.body": "On first launch macOS asks for access to the \"Claude Safe Storage\" keychain item. Enter your Mac login password (the one you unlock the screen with) and choose Always Allow. The dialog can appear several times in a row (up to four in our testing); answer it the same way each time. Once allowed, the copy signs in with your existing session.\nThe copy may show a \"For your security, sign in again\" banner. Ignore it. Use this copy only to check how the fonts look; keep using the real Claude for everyday work.",
+        "help.step5.title": "Launch the test Claude and check the fonts",
+        "help.step6.body": "Once you are happy with the result, switch back to the Production Claude card and apply again.",
+        "help.step6.title": "Apply to the real Claude",
+        "help.step7.body": "Applying runs in order: quit the target app → take a full backup → repack → update the integrity hash → re-sign → verify it launches. If any step fails or you cancel, the files are put back and the signature re-verified, so the worst outcome is \"not applied\" — never an app that won't start.\nNote that the automatic rollback does not restore Claude's original signature. Use Restore for that.",
+        "help.step7.title": "What applying does, and what happens if it fails",
+        "help.step8.body": "Claude's automatic updates overwrite whatever Clfont applied. When that happens, the main window says so and offers a Re-apply button — one click restores it, and your font settings are kept.",
+        "help.step8.title": "Re-apply after Claude updates",
+        "help.step9.body": "Use Restore to undo everything; when a full backup matching the current version exists, Anthropic's original signature comes back with it. If something looks wrong, use Diagnose — it checks app integrity, unfinished transactions, fonts, disk space, hashes and signatures, and writes the result to the log.",
+        "help.step9.title": "Restore and Diagnose",
+        "help.title": "How to use Clfont",
+        "target.hint": "Check the fonts on the test Claude before applying to the real one.",
+        "toolchain.body": "Clfont's actual work is done by a script that needs macOS's python3, which ships with the Xcode Command Line Tools. Without them nothing can be modified — your Claude is left untouched.",
+        "toolchain.install": "Install Command Line Tools",
+        "toolchain.recheck": "Installed — check again",
+        "toolchain.title": "Xcode Command Line Tools required",
+        "stale.action": "Re-apply",
+        "stale.body": "Claude's automatic update rewrote the app, so the fonts you applied are gone. Re-applying restores them; your settings are unchanged.",
+        "stale.title": "Claude updated — your fonts were overwritten",
+        "appmgmt.body": "Modifying Claude's app bundle needs the App Management permission. macOS asks the first time you apply. If you chose Don't Allow, use the button below, turn Clfont on, and try again.",
+        "appmgmt.open": "Open App Management settings",
+        "appmgmt.recheck": "Enabled — check again",
+        "appmgmt.title": "Can't modify Claude: App Management permission missing",
+        "helper.body": "Early versions of Clfont stripped the system permissions of Claude's internal components while re-signing, which breaks Cowork and virtual machines. Re-apply once and Clfont will restore from a full backup before making its changes. If no backup is available, reinstall Claude.",
+        "helper.title": "Permissions stripped by an earlier version",
+        "update.auto": "Check for updates on launch",
+        "update.body": "Download it and replace Clfont in your Applications folder; your font settings are kept. If you have already applied fonts to Claude, apply once more after updating.",
+        "update.download": "Download",
+        "update.later": "Later",
+
+        "header.whatsnew": "What's new",
+        "header.help": "How to use",
+        "target.prod": "Production Claude",
+        "target.test": "Test Claude",
+        "target.none": "Not created yet — use the button above",
+        "target.title": "Which Claude do you want to restyle?",
+        "target.create": "Create test Claude",
+        "target.rebuild": "Rebuild",
+        "target.delete": "Delete",
+
+        "status.missing": "Can't find this Claude",
+        "status.loading": "Reading…",
+        "status.applied": "{font} applied",
+        "status.font": "font",
+        "status.stale": "Fonts are not in effect",
+        "status.none": "Not applied — reversible at any time",
+        "status.detail": "Details",
+        "status.collapse": "Hide",
+        "status.backedup": "Backed up",
+        "status.nobackup": "No backup",
+        "status.checked": "checked {time}",
+        "detail.integrity": "asar integrity",
+        "detail.match": "OK",
+        "detail.mismatch": "Mismatch",
+        "detail.pass": "Valid",
+        "detail.fail": "Invalid",
+        "detail.backups": "Full backups",
+        "detail.none": "None",
+        "detail.count": "{n}",
+        "detail.disk": "Free space",
+        "detail.usage": "Backup size",
+        "detail.prune": "Remove {n} old backup(s)",
+        "detail.keepall": "All needed",
+
+        "font.group": "Fonts",
+        "font.scope": "Scope",
+        "font.scope.cjk": "Chinese",
+        "font.scope.latin": "English",
+        "font.scope.both": "Both",
+        "font.cjk": "Chinese font",
+        "font.cjk.size": "Chinese size",
+        "font.latin": "English font",
+        "font.latin.size": "English size",
+        "font.mode": "Compatibility",
+        "font.mode.std": "Standard",
+        "font.mode.ext": "Extended",
+        "font.preview.label": "Preview",
+        "font.reset": "Reset to 100%",
+        "font.sample": "Aa字",
+
+        "action.apply": "Apply to {target}",
+        "action.reapply": "Re-apply to {target}",
+        "action.doctor": "Diagnose",
+        "action.open": "Open",
+        "action.restore": "Restore",
+
+        "log.show": "Show log ({n})",
+        "log.hide": "Hide log",
+        "log.clear": "Clear log",
+        "log.cleared": "Log cleared",
+        "log.guard": "Backed up — rolls back automatically on failure",
+
+        "busy.status": "Reading {target} status",
+        "busy.install": "Applying to {target}: back up → repack → re-sign → launch test (1–2 min)",
+        "busy.uninstall": "Restoring {target}: put files back → re-sign",
+        "busy.doctor": "Diagnosing {target}",
+        "busy.prune": "Removing old backups",
+        "busy.create": "Creating test copy: duplicate → new identity → re-sign → carry over session",
+        "busy.remove": "Removing test Claude: copy, profile and its backups",
+        "msg.clifail": "✗ Could not start the CLI: {err}",
+        "msg.noscript": "✗ {name} not found",
+        "msg.opened": "· Test Claude launched (separate profile)",
+        "msg.openfail": "✗ Could not launch the test Claude: {err}",
+
+        "sheet.cancel": "Cancel",
+        "sheet.ok": "Got it",
+        "sheet.delete.title": "Delete the test Claude?",
+        "sheet.delete.ok": "Delete",
+        "sheet.delete.body": "This removes the test Claude, its profile directory and its full backups in Clfont's data folder, freeing roughly 1 GB.\n\nYour real Claude and its backups are untouched. You can create it again at any time.",
+        "sheet.create.title": "Create a test Claude?",
+        "sheet.create.ok": "Create",
+        "sheet.create.body": "This copies your real Claude, gives the copy its own app identity, and carries your current session over so you don't have to sign in again. The copy uses a separate profile directory — nothing you do in it affects the real Claude.\n\nAn existing copy is deleted and recreated.",
+        "sheet.restore.title": "Restore Claude's fonts?",
+        "sheet.restore.body": "This restores {target}'s app.asar from backup and re-signs it. The current {font} setting is removed. Claude must be quit and reopened.",
+        "sheet.restore.backup": "Backup {name}",
+        "sheet.restore.nobackup": "No full backup — restoring from the app.asar.bak original",
+
+        "update.check": "Check for updates",
+        "update.title": "Clfont {tag} is available",
+        "update.norepo": "Not published on GitHub yet, so there is nothing to check.",
+        "update.found": "Version {tag} is available.",
+        "update.latest": "You're on the latest version.",
+        "update.norelease": "No releases have been published yet.",
+        "update.failed": "Check failed: {why}",
+        "update.err.norepo": "No repository configured",
+        "update.err.rate": "GitHub is rate-limiting; try again shortly",
+        "update.err.code": "GitHub returned {code}",
+        "update.err.parse": "Could not read the release information",
+
+        "about.title": "About Clfont",
+        "about.version": "Version {v} ({b})",
+        "about.tagline": "Replaces the display fonts in Claude for desktop — Chinese, English, or both",
+        "about.dev": "Developer",
+        "about.devname": "Wan Zhao (Jovan)",
+        "about.footer": "Only modifies the Claude app installed on this Mac. Never reads accounts or conversations.",
+        "about.lang": "Language",
+        "about.lang.auto": "System",
+        "release.version": "Version {v}",
+        "release.current": "Current",
+
+        "help.a2.lead": "On the Test Claude card, click",
+        "help.a2.tail": " — takes about a minute",
+        "help.a4.lead": "Click",
+        "help.a3.tail": "switch to Extended only if Standard doesn't work",
     ]
 
     static var fileURL: URL {
@@ -72,7 +387,11 @@ final class Copy: ObservableObject {
             + "/Library/Application Support/clfont/copy-overrides.json")
     }
 
+    /// 调试版的实时改稿；与语言无关，覆盖当前生效的那一条
     @Published private(set) var overrides: [String: String] = [:]
+
+    /// 调试面板列 key 用；英文缺的条目用中文补齐，保证覆盖全部 key
+    static var defaults: [String: String] { en.merging(zh) { a, _ in a } }
 
     private init() { load() }
 
@@ -103,12 +422,20 @@ final class Copy: ObservableObject {
     }
 
     func text(_ key: String) -> String {
-        overrides[key] ?? Copy.defaults[key] ?? key
+        if let o = overrides[key] { return o }
+        if effective == .en, let e = Copy.en[key] { return e }
+        return Copy.zh[key] ?? key
     }
 }
 
-/// 取文案。`t("key")`；需要插值的用 `{占位符}`，调用处再 replace。
+/// 取文案。`t("key")`；带占位符的用 `t("key", ["{n}": "3"])`。
 func t(_ key: String) -> String { Copy.shared.text(key) }
+
+func t(_ key: String, _ subs: [String: String]) -> String {
+    var s = Copy.shared.text(key)
+    for (k, v) in subs { s = s.replacingOccurrences(of: k, with: v) }
+    return s
+}
 
 // MARK: - 设计 tokens
 
@@ -191,46 +518,90 @@ private struct NoticeCard<Actions: View>: View {
 /// 面向用户的更新说明：只说「改了什么」和「你要做什么」，不堆术语。
 struct ReleaseNote: Identifiable {
     let version: String
-    let changes: [String]
-    /// 需要用户配合的动作；没有就留空
-    let action: String?
+    /// 中英文各存一份，改起来两边对照着看，不容易漏
+    let zh: [String]
+    let en: [String]
+    /// 需要用户配合的动作；没有就留 nil
+    let actionZH: String?
+    let actionEN: String?
     var id: String { version }
+
+    var changes: [String] { Copy.shared.effective == .en ? en : zh }
+    var action: String? { Copy.shared.effective == .en ? actionEN : actionZH }
 }
 
 let releaseNotes: [ReleaseNote] = [
     ReleaseNote(
+        version: "6.0",
+        zh: [
+            "新增页面底色调节，可把 Claude 的界面改成米黄等暖色。只在浅色模式下生效，深色模式不受影响。",
+            "新增代码块字体与字号的单独设置。",
+            "新增界面语言切换，支持简体中文与英文，默认跟随系统。",
+            "修复替换英文时，带重音的拉丁字母（é ü ñ 等）不跟随变化的问题。",
+        ],
+        en: [
+            "Added a page background color, so Claude's interface can be warmed up to cream or any other tint. Light mode only; dark mode is untouched.",
+            "Added separate font and size settings for code blocks.",
+            "Added an interface language switch — Simplified Chinese and English, following the system by default.",
+            "Fixed accented Latin letters (é, ü, ñ and friends) not changing along with the rest of the English text.",
+        ],
+        actionZH: nil, actionEN: nil),
+    ReleaseNote(
         version: "5.3",
-        changes: [
+        zh: [
             "新增字号调节。中文与英文可分别设置 80% 至 150%，用于弥补宋体等字体默认显示偏小的问题。该设置只作用于被替换的文字，界面图标、行距与整体布局均不受影响。",
             "缺少「App 管理」权限导致修改被系统拦下时，界面会给出说明，并提供直接前往对应设置面板的入口。",
             "执行修改前先行确认该权限，不再等到备份完成后才失败。",
         ],
-        action: nil),
+        en: [
+            "Added size adjustment. Chinese and English can each be set between 80% and 150%, which helps with fonts like Songti that render small by default. It only affects the replaced text — interface icons, line spacing and layout are unchanged.",
+            "When the App Management permission is missing and macOS blocks the change, the window now explains why and offers a direct link to the right settings pane.",
+            "That permission is now checked before any work begins, instead of failing after the backup completes.",
+        ],
+        actionZH: nil, actionEN: nil),
     ReleaseNote(
         version: "5.2",
-        changes: [
+        zh: [
             "修复应用字体后 Claude 的 Cowork、虚拟机等功能不可用的问题。此前重新签名时会一并清除 Claude 内部组件的系统权限，现已完整保留。",
             "对早期版本造成的上述权限缺失，程序会在检测到时提示，并在下次「应用」时从完整备份自动修复。",
             "Claude 自动更新覆盖已应用的字体时，主界面会直接给出提示与重新应用入口，不必自行察觉。",
             "修正测试 Claude 与正式 Claude 共用一份应用记录的问题，两者的状态现已分别记录。",
             "新增自动检查更新：启动时于后台查询一次，有新版本时在界面中提示。该功能可在「关于」中关闭。",
         ],
-        action: "若此前已为 Claude 应用过字体，建议重新执行一次「应用」，以恢复被早期版本清除的系统权限。"),
+        en: [
+            "Fixed Cowork and virtual machines becoming unavailable after applying fonts. Re-signing used to strip the system permissions of Claude's internal components; they are now preserved in full.",
+            "Where an earlier version already stripped those permissions, Clfont detects it and repairs it from a full backup the next time you apply.",
+            "When a Claude update overwrites your fonts, the main window now says so and offers a re-apply button.",
+            "Fixed the test and production Claude sharing a single record of what was applied; each is now tracked separately.",
+            "Added an automatic update check: once in the background on launch, with a notice when a new version is available. Can be turned off under About.",
+        ],
+        actionZH: "若此前已为 Claude 应用过字体，建议重新执行一次「应用」，以恢复被早期版本清除的系统权限。",
+        actionEN: "If you have applied fonts with an earlier version, apply once more to restore the system permissions it stripped."),
     ReleaseNote(
         version: "5.1",
-        changes: [
+        zh: [
             "修复替换英文时，侧边栏、输入框等区域字体不跟随变化的问题。",
             "修复 Claude 思考过程文本字体偶发不跟随变化的问题。",
         ],
-        action: "若此前已为 Claude 应用过字体，需重新执行一次「应用」，本次修复方可生效。"),
+        en: [
+            "Fixed the sidebar, composer and similar areas not picking up the new font when replacing English.",
+            "Fixed Claude's thinking text occasionally keeping its original font.",
+        ],
+        actionZH: "若此前已为 Claude 应用过字体，需重新执行一次「应用」，本次修复方可生效。",
+        actionEN: "If you have already applied fonts, apply once more for this fix to take effect."),
     ReleaseNote(
         version: "5.0",
-        changes: [
+        zh: [
             "支持替换中文、英文或中英文，中英文字体可分别指定。",
             "提供测试 Claude，可在改动日常使用的应用之前先确认效果。",
             "支持随时还原，并在备份可用时一并恢复 Claude 的原始签名。",
         ],
-        action: nil),
+        en: [
+            "Replace Chinese, English or both, with a separate font for each.",
+            "A test Claude to try things on before touching the app you use every day.",
+            "Restore at any time, bringing back Claude's original signature when a matching backup exists.",
+        ],
+        actionZH: nil, actionEN: nil),
 ]
 
 // MARK: - 开发者工具
@@ -263,12 +634,34 @@ enum Toolchain {
     }
 }
 
+// MARK: - CLI 输出标记
+
+/// 这些**不是界面文案**，是 CLI（clfont，Python）输出里用来解析状态的字面量。
+/// 界面切成英文时它们必须原样不动——改动前请同步改 CLI，两边一起改。
+enum CLIMarker {
+    static let patched = "已打补丁"
+    static let signBad = "codesign -v：未通过"
+    static let hashBad = "asar 完整性哈希：不匹配"
+    static let stale = "补丁已失效"
+    static let helperMissing = "Helper 权限：缺失"
+    static let version = "Claude 版本："
+    static let backups = "整包备份："
+    static let none = "无"
+    static let font = "字体 "
+    static let totalPrefix = "合计 "
+    static let totalMid = "），其中"
+    static let prunablePrefix = "其中 "
+    static let prunableSuffix = " 份可清理"
+    static let appMgmtNeeded = "需要「App 管理」权限"
+    static let appMgmtDenied = "「App 管理」权限：无法写入"
+}
+
 // MARK: - 目标
 
 enum Target: String, CaseIterable, Identifiable {
     case production, testCopy
     var id: String { rawValue }
-    var label: String { self == .production ? "正式 Claude" : "测试 Claude" }
+    var label: String { t(self == .production ? "target.prod" : "target.test") }
     var tint: Color { self == .production ? DS.prod : DS.test }
 }
 
@@ -392,18 +785,18 @@ final class OutputBox: @unchecked Sendable {
     var current: AppStatus { statuses[target] ?? AppStatus() }
 
     /// nil = 用 CLI 的默认目标（/Applications/Claude.app）
-    func cliPath(_ t: Target) -> String? {
-        t == .production ? nil : Paths.testApp
+    func cliPath(_ tgt: Target) -> String? {
+        tgt == .production ? nil : Paths.testApp
     }
-    func fullPath(_ t: Target) -> String {
-        t == .production ? "/Applications/Claude.app" : Paths.testApp
+    func fullPath(_ tgt: Target) -> String {
+        tgt == .production ? "/Applications/Claude.app" : Paths.testApp
     }
-    func exists(_ t: Target) -> Bool {
-        FileManager.default.fileExists(atPath: fullPath(t))
+    func exists(_ tgt: Target) -> Bool {
+        FileManager.default.fileExists(atPath: fullPath(tgt))
     }
-    func displayPath(_ t: Target) -> String {
-        if t == .production { return "/Applications/Claude.app" }
-        return exists(t) ? "~/Library/Application Support/clfont" : "尚未创建，点击右上角创建"
+    func displayPath(_ tgt: Target) -> String {
+        if tgt == .production { return "/Applications/Claude.app" }
+        return exists(tgt) ? "~/Library/Application Support/clfont" : t("target.none")
     }
 
     var logLines: [String] {
@@ -482,18 +875,18 @@ final class OutputBox: @unchecked Sendable {
         }
     }
 
-    private func exec(_ args: [String], on t: Target, label: String, stream: Bool = true,
+    private func exec(_ args: [String], on tgt: Target, label: String, stream: Bool = true,
                       done: (@MainActor (Int32, String) -> Void)? = nil) {
         var a = args
-        if let tp = cliPath(t) { a = ["--app", tp] + a }
+        if let tp = cliPath(tgt) { a = ["--app", tp] + a }
         var env = ProcessInfo.processInfo.environment
         env["PYTHONUNBUFFERED"] = "1"
-        if t == .testCopy {
+        if tgt == .testCopy {
             // 装补丁时的启动测试用独立配置目录，别去动用户正在用的那份
             env["CLFONT_SMOKE_USER_DATA_DIR"] = Paths.smokeProfile
         }
         spawn(exe: cli, args: a, env: env, label: label, stream: stream,
-              echo: "clfont \(args.joined(separator: " "))  →  \(t.label)", done: done)
+              echo: "clfont \(args.joined(separator: " "))  →  \(tgt.label)", done: done)
     }
 
     private func spawn(exe: String, args: [String], env: [String: String],
@@ -528,43 +921,42 @@ final class OutputBox: @unchecked Sendable {
             }
         }
         do { try p.run() } catch {
-            log += "✗ 启动 CLI 失败：\(error.localizedDescription)\n"
+            log += t("msg.clifail", ["{err}": error.localizedDescription]) + "\n"
             busy = false; busyLabel = ""
         }
     }
 
     /// 读取某个目标的状态并单独存起来
-    func refresh(_ t: Target, then: (@MainActor () -> Void)? = nil) {
-        guard exists(t) else {
-            statuses[t] = AppStatus(loaded: true, missing: true)
+    func refresh(_ tgt: Target, then: (@MainActor () -> Void)? = nil) {
+        guard exists(tgt) else {
+            statuses[tgt] = AppStatus(loaded: true, missing: true)
             then?(); return
         }
-        exec(["status"], on: t, label: "读取\(t.label)状态", stream: false) { [weak self] _, out in
+        exec(["status"], on: tgt, label: t("busy.status", ["{target}": tgt.label]), stream: false) { [weak self] _, out in
             guard let self else { return }
             var s = AppStatus()
             s.loaded = true
             s.raw = out
-            s.patched = out.contains("已打补丁")
-            s.signOK = !out.contains("codesign -v：未通过")
-            s.integrityOK = !out.contains("asar 完整性哈希：不匹配")
-            // 这两个标记由 CLI 的 status 输出，改措辞要两边一起改
-            s.stale = out.contains("补丁已失效")
-            s.helperOK = !out.contains("Helper 权限：缺失")
-            if let r = out.range(of: "Claude 版本：") {
+            s.patched = out.contains(CLIMarker.patched)
+            s.signOK = !out.contains(CLIMarker.signBad)
+            s.integrityOK = !out.contains(CLIMarker.hashBad)
+            s.stale = out.contains(CLIMarker.stale)
+            s.helperOK = !out.contains(CLIMarker.helperMissing)
+            if let r = out.range(of: CLIMarker.version) {
                 s.version = String(out[r.upperBound...].prefix { !$0.isNewline })
                     .trimmingCharacters(in: .whitespaces)
             }
-            if let r = out.range(of: "整包备份：") {
+            if let r = out.range(of: CLIMarker.backups) {
                 let line = String(out[r.upperBound...].prefix { !$0.isNewline })
                     .trimmingCharacters(in: .whitespaces)
-                s.backups = line == "无" ? [] : line.components(separatedBy: "、")
+                s.backups = line == CLIMarker.none ? [] : line.components(separatedBy: "、")
             }
-            if let r = out.range(of: "字体 ") {
+            if let r = out.range(of: CLIMarker.font) {
                 s.font = String(out[r.upperBound...].prefix { $0 != "，" && !$0.isNewline })
             }
             let f = DateFormatter(); f.dateFormat = "HH:mm"
             s.checkedAt = f.string(from: Date())
-            self.statuses[t] = s
+            self.statuses[tgt] = s
             then?()
         }
     }
@@ -577,29 +969,29 @@ final class OutputBox: @unchecked Sendable {
     /// 统计备份占用。du 要扫整个 app 包（1–2 秒），所以：只在展开「详情」时跑、
     /// 结果按目标缓存、并且**不走 busy 那条通道**——它只是只读统计，没必要把
     /// 整个界面禁用掉，否则切换目标时会灰一下，看着像卡顿。
-    func loadBackups(_ t: Target, force: Bool = false) {
-        guard exists(t) else { backupInfo[t] = ("", 0); return }
-        if !force, backupInfo[t] != nil { return }
-        guard !backupLoading.contains(t) else { return }
-        backupLoading.insert(t)
+    func loadBackups(_ tgt: Target, force: Bool = false) {
+        guard exists(tgt) else { backupInfo[tgt] = ("", 0); return }
+        if !force, backupInfo[tgt] != nil { return }
+        guard !backupLoading.contains(tgt) else { return }
+        backupLoading.insert(tgt)
         var args = ["backups"]
-        if let tp = cliPath(t) { args = ["--app", tp] + args }
+        if let tp = cliPath(tgt) { args = ["--app", tp] + args }
         runQuiet(args) { [weak self] out in
             guard let self else { return }
-            self.backupLoading.remove(t)
+            self.backupLoading.remove(tgt)
             var summary = ""
             var prunable = 0
-            for raw in out.split(separator: "\n") where raw.contains("合计 ") {
+            for raw in out.split(separator: "\n") where raw.contains(CLIMarker.totalPrefix) {
                 let line = String(raw)
-                if let a = line.range(of: "合计 "), let b = line.range(of: "），其中") {
+                if let a = line.range(of: CLIMarker.totalPrefix), let b = line.range(of: CLIMarker.totalMid) {
                     summary = String(line[a.upperBound..<b.lowerBound])
                         .replacingOccurrences(of: "（", with: " · ")
                 }
-                if let a = line.range(of: "其中 "), let b = line.range(of: " 份可清理") {
+                if let a = line.range(of: CLIMarker.prunablePrefix), let b = line.range(of: CLIMarker.prunableSuffix) {
                     prunable = Int(line[a.upperBound..<b.lowerBound]) ?? 0
                 }
             }
-            self.backupInfo[t] = (summary, prunable)
+            self.backupInfo[tgt] = (summary, prunable)
         }
     }
 
@@ -626,39 +1018,39 @@ final class OutputBox: @unchecked Sendable {
         }
     }
 
-    func pruneBackups(_ t: Target) {
-        exec(["backups", "--prune", "-y"], on: t, label: "清理旧备份") {
-            [weak self] _, _ in self?.loadBackups(t, force: true)
+    func pruneBackups(_ tgt: Target) {
+        exec(["backups", "--prune", "-y"], on: tgt, label: t("busy.prune")) {
+            [weak self] _, _ in self?.loadBackups(tgt, force: true)
         }
     }
 
     func install() {
         saveConfig()
-        let t = target
+        let tgt = target
         exec(["install", "-y", "--scope", scope, "--mode", mode,
               "--scale", String(Int(fontScale.rounded())),
-              "--scale-latin", String(Int(fontScaleLatin.rounded()))], on: t,
-             label: "安装到「\(t.label)」：备份 → 重打包 → 重签名 → 启动测试（约 1–2 分钟）") {
+              "--scale-latin", String(Int(fontScaleLatin.rounded()))], on: tgt,
+             label: t("busy.install", ["{target}": tgt.label])) {
             [weak self] _, out in
             self?.noteAppMgmt(out)
-            self?.refresh(t)
+            self?.refresh(tgt)
         }
     }
 
     func uninstall() {
-        let t = target
-        exec(["uninstall", "-y"], on: t, label: "还原「\(t.label)」：恢复原文件 → 重签名") {
+        let tgt = target
+        exec(["uninstall", "-y"], on: tgt, label: t("busy.uninstall", ["{target}": tgt.label])) {
             [weak self] _, out in
             self?.noteAppMgmt(out)
-            self?.refresh(t)
+            self?.refresh(tgt)
         }
     }
 
     func doctor() {
-        let t = target
-        exec(["doctor"], on: t, label: "自检「\(t.label)」") { [weak self] _, out in
+        let tgt = target
+        exec(["doctor"], on: tgt, label: t("busy.doctor", ["{target}": tgt.label])) { [weak self] _, out in
             self?.noteAppMgmt(out)
-            self?.refresh(t)
+            self?.refresh(tgt)
         }
     }
 
@@ -666,8 +1058,8 @@ final class OutputBox: @unchecked Sendable {
     /// doctor 的「无法写入」。注意 doctor 通过时也会打印「App 管理」四个字，
     /// 所以不能只匹配这四个字。措辞改动需与 CLI 同步。
     private func noteAppMgmt(_ out: String) {
-        let denied = out.contains("需要「App 管理」权限")
-            || out.contains("「App 管理」权限：无法写入")
+        let denied = out.contains(CLIMarker.appMgmtNeeded)
+            || out.contains(CLIMarker.appMgmtDenied)
         withAnimation(DS.ease) { appMgmtDenied = denied }
     }
 
@@ -675,12 +1067,12 @@ final class OutputBox: @unchecked Sendable {
     /// 并把登录态播种过去。脚本随 app 打包在 Resources 里。
     func rebuildTestCopy() {
         guard let script = Bundle.main.path(forResource: "setup-test-copy", ofType: "sh") else {
-            log += "\n✗ 找不到 setup-test-copy.sh\n"
+            log += "\n" + t("msg.noscript", ["{name}": "setup-test-copy.sh"]) + "\n"
             return
         }
         spawn(exe: "/bin/bash", args: [script],
               env: ProcessInfo.processInfo.environment,
-              label: "创建测试副本：复制 → 换独立身份 → 重签名 → 播种登录态",
+              label: t("busy.create"),
               stream: true, echo: "bash setup-test-copy.sh") { [weak self] _, _ in
             self?.refresh(.testCopy)
         }
@@ -689,12 +1081,12 @@ final class OutputBox: @unchecked Sendable {
     /// 彻底移除测试 Claude：应用副本、配置目录、它自己的整包备份。
     func removeTestCopy() {
         guard let script = Bundle.main.path(forResource: "remove-test-copy", ofType: "sh") else {
-            log += "\n✗ 找不到 remove-test-copy.sh\n"
+            log += "\n" + t("msg.noscript", ["{name}": "remove-test-copy.sh"]) + "\n"
             return
         }
         spawn(exe: "/bin/bash", args: [script],
               env: ProcessInfo.processInfo.environment,
-              label: "移除测试 Claude：删除副本、配置目录与它的备份",
+              label: t("busy.remove"),
               stream: true, echo: "bash remove-test-copy.sh") { [weak self] _, _ in
             guard let self else { return }
             self.target = .production
@@ -719,9 +1111,9 @@ final class OutputBox: @unchecked Sendable {
         p.standardError = FileHandle.nullDevice
         do {
             try p.run()
-            log += "\n· 已启动测试 Claude（独立配置目录）\n"
+            log += "\n" + t("msg.opened") + "\n"
         } catch {
-            log += "\n✗ 启动测试 Claude 失败：\(error.localizedDescription)\n"
+            log += "\n" + t("msg.openfail", ["{err}": error.localizedDescription]) + "\n"
         }
     }
 }
@@ -926,8 +1318,9 @@ struct ContentView: View {
     @State private var showHelp = false
     @State private var showWhatsNew = false
     @StateObject private var updates = UpdateWatcher()
-#if CLFONT_DEBUG
+    /// 切换界面语言要让整个界面重画，所以正式版也观察它
     @ObservedObject private var copy = Copy.shared
+#if CLFONT_DEBUG
     @State private var showDebug = true
     @State private var dbgToolsMissing = false
     @State private var dbgBusy = false
@@ -1021,22 +1414,17 @@ struct ContentView: View {
         .animation(DS.pop, value: confirmRestore)
         .animation(DS.pop, value: showHelp)
         .animation(DS.pop, value: showWhatsNew)
-        .alert("彻底删除测试 Claude？", isPresented: $confirmRemove) {
-            Button("取消", role: .cancel) {}
-            Button("删除", role: .destructive) { m.removeTestCopy() }
+        .alert(t("sheet.delete.title"), isPresented: $confirmRemove) {
+            Button(t("sheet.cancel"), role: .cancel) {}
+            Button(t("sheet.delete.ok"), role: .destructive) { m.removeTestCopy() }
         } message: {
-            Text("将删除测试 Claude 的应用副本、它的配置目录，以及它在 clfont 数据目录中的"
-                 + "整包备份，可释放约 1 GB 空间。\n\n"
-                 + "正式 Claude 及其备份不受影响。之后仍可随时重新创建。")
+            Text(t("sheet.delete.body"))
         }
-        .alert("创建测试 Claude？", isPresented: $confirmRebuild) {
-            Button("取消", role: .cancel) {}
-            Button("创建", role: .destructive) { m.rebuildTestCopy() }
+        .alert(t("sheet.create.title"), isPresented: $confirmRebuild) {
+            Button(t("sheet.cancel"), role: .cancel) {}
+            Button(t("sheet.create.ok"), role: .destructive) { m.rebuildTestCopy() }
         } message: {
-            Text("将从正式 Claude 复制一份副本，替换为独立的应用标识，并把当前的登录"
-                 + "状态复制过去，因此无需重新登录。副本使用独立的配置目录，"
-                 + "在其上进行的任何操作都不会影响正式 Claude。\n\n"
-                 + "若副本已存在，将被删除后重新创建。")
+            Text(t("sheet.create.body"))
         }
     }
 
@@ -1114,7 +1502,7 @@ struct ContentView: View {
     /// 不再打扰；查不到、网络不通都不显示任何东西。
     private func updateNotice(_ r: Updater.Release) -> some View {
         NoticeCard(tint: DS.accent, symbol: "arrow.down",
-                   title: "Clfont \(r.tag) 可供下载", message: t("update.body")) {
+                   title: t("update.title", ["{tag}": r.tag]), message: t("update.body")) {
             HStack(spacing: 10) {
                 Button(t("update.download")) { NSWorkspace.shared.open(r.page) }
                     .buttonStyle(.glassProminent).tint(DS.accent)
@@ -1185,7 +1573,7 @@ struct ContentView: View {
                                     .offset(x: 4, y: -2)
                             }
                         }
-                        Text("新特性").font(.system(size: 13))
+                        Text(t("header.whatsnew")).font(.system(size: 13))
                     }
                     .contentShape(Rectangle())
                 }
@@ -1196,7 +1584,7 @@ struct ContentView: View {
                     HStack(spacing: 5) {
                         Image(systemName: "questionmark.circle")
                             .font(.system(size: 13, weight: .medium))
-                        Text("如何使用").font(.system(size: 13))
+                        Text(t("header.help")).font(.system(size: 13))
                     }
                     .contentShape(Rectangle())
                 }
@@ -1228,7 +1616,7 @@ struct ContentView: View {
                 }
                 Spacer()
                 if !s.missing {
-                    Button(detailOpen ? "收起" : "详情") {
+                    Button(detailOpen ? t("status.collapse") : t("status.detail")) {
                         detailOpen.toggle()
                         if detailOpen { m.loadBackups(m.target) }
                     }
@@ -1249,19 +1637,20 @@ struct ContentView: View {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 20),
                                     GridItem(.flexible())],
                           alignment: .leading, spacing: 8) {
-                    DetailRow(label: "asar 完整性",
-                              value: s.integrityOK ? "匹配" : "不匹配", bad: !s.integrityOK)
+                    DetailRow(label: t("detail.integrity"),
+                              value: t(s.integrityOK ? "detail.match" : "detail.mismatch"), bad: !s.integrityOK)
                     DetailRow(label: "codesign",
-                              value: s.signOK ? "通过" : "未通过", bad: !s.signOK)
-                    DetailRow(label: "整包备份",
-                              value: s.backups.isEmpty ? "无" : "\(s.backups.count) 份")
-                    DetailRow(label: "磁盘剩余", value: m.diskFree)
+                              value: t(s.signOK ? "detail.pass" : "detail.fail"), bad: !s.signOK)
+                    DetailRow(label: t("detail.backups"),
+                              value: s.backups.isEmpty ? t("detail.none")
+                                                      : t("detail.count", ["{n}": String(s.backups.count)]))
+                    DetailRow(label: t("detail.disk"), value: m.diskFree)
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 12).padding(.bottom, 10)
 
                 HStack(spacing: 8) {
-                    Text("备份占用").font(.system(size: 12)).foregroundStyle(.secondary)
+                    Text(t("detail.usage")).font(.system(size: 12)).foregroundStyle(.secondary)
                     let info = m.backupInfo[m.target]
                     if m.backupLoading.contains(m.target) {
                         ProgressView().controlSize(.small).scaleEffect(0.7)
@@ -1271,12 +1660,12 @@ struct ContentView: View {
                     }
                     Spacer()
                     if let n = info?.prunable, n > 0 {
-                        Button("清理 \(n) 份旧备份") { m.pruneBackups(m.target) }
+                        Button(t("detail.prune", ["{n}": String(n)])) { m.pruneBackups(m.target) }
                             .buttonStyle(.plain)
                             .font(.system(size: 12)).foregroundStyle(DS.accent)
                             .disabled(m.busy)
                     } else if info?.summary.isEmpty == false {
-                        Text("均需保留").font(.system(size: 11.5)).foregroundStyle(.tertiary)
+                        Text(t("detail.keepall")).font(.system(size: 11.5)).foregroundStyle(.tertiary)
                     }
                 }
                 .padding(.horizontal, 16).padding(.bottom, 14)
@@ -1286,18 +1675,18 @@ struct ContentView: View {
     }
 
     private func statusHeadline(_ s: AppStatus) -> String {
-        if s.missing { return "找不到这个 Claude" }
-        if !s.loaded { return "读取中…" }
-        if s.patched { return "已应用 " + (s.font.isEmpty ? "字体" : s.font) }
-        if s.stale { return "字体当前未生效" }     // 具体原因由下方提示条说明
-        return "尚未应用，随时可以撤回"
+        if s.missing { return t("status.missing") }
+        if !s.loaded { return t("status.loading") }
+        if s.patched { return t("status.applied", ["{font}": s.font.isEmpty ? t("status.font") : s.font]) }
+        if s.stale { return t("status.stale") }     // 具体原因由下方提示条说明
+        return t("status.none")
     }
 
     private func statusSubline(_ s: AppStatus) -> String {
         if s.missing { return m.displayPath(m.target) }
         var parts = [m.target.label, s.version]
-        parts.append(s.backups.isEmpty ? "未备份" : "已备份")
-        if !s.checkedAt.isEmpty { parts.append("\(s.checkedAt) 检查") }
+        parts.append(t(s.backups.isEmpty ? "status.nobackup" : "status.backedup"))
+        if !s.checkedAt.isEmpty { parts.append(t("status.checked", ["{time}": s.checkedAt])) }
         return parts.joined(separator: " · ")
     }
 
@@ -1306,21 +1695,21 @@ struct ContentView: View {
     private var targetGroup: some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack {
-                GroupLabel(text: "选择需要更换字体的 Claude 版本")
+                GroupLabel(text: t("target.title"))
                 Spacer()
                 if !m.exists(.testCopy) {
                     // 还没建的时候一直显示，不用先点卡片才发现有这么个入口
-                    Button("创建测试 Claude") { confirmRebuild = true }
+                    Button(t("target.create")) { confirmRebuild = true }
                         .buttonStyle(.plain)
                         .font(.system(size: 12)).foregroundStyle(DS.accent)
                         .disabled(m.busy)
                 } else if m.target == .testCopy {
-                    Button("重建") { confirmRebuild = true }
+                    Button(t("target.rebuild")) { confirmRebuild = true }
                         .buttonStyle(.plain)
                         .font(.system(size: 12)).foregroundStyle(DS.accent)
                         .disabled(m.busy)
                     Text("·").font(.system(size: 12)).foregroundStyle(.tertiary)
-                    Button("删除") { confirmRemove = true }
+                    Button(t("target.delete")) { confirmRemove = true }
                         .buttonStyle(.plain)
                         .font(.system(size: 12)).foregroundStyle(DS.danger)
                         .disabled(m.busy)
@@ -1337,23 +1726,23 @@ struct ContentView: View {
         }
     }
 
-    private func targetTile(_ t: Target) -> some View {
-        let on = m.target == t
-        let s = m.statuses[t] ?? AppStatus()
-        let needsPick = (t == .testCopy && !m.exists(t))
-        return Button { m.target = t } label: {
+    private func targetTile(_ tgt: Target) -> some View {
+        let on = m.target == tgt
+        let s = m.statuses[tgt] ?? AppStatus()
+        let needsPick = (tgt == .testCopy && !m.exists(tgt))
+        return Button { m.target = tgt } label: {
             HStack(spacing: 11) {
-                tileIcon(t)
+                tileIcon(tgt)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(t.label).font(.system(size: 14, weight: .semibold))
-                    Text(m.displayPath(t))
+                    Text(tgt.label).font(.system(size: 14, weight: .semibold))
+                    Text(m.displayPath(tgt))
                         .font(.system(size: 11, design: .monospaced))
                         .foregroundStyle(.secondary)
                         .lineLimit(1).truncationMode(.middle)
                 }
                 Spacer(minLength: 4)
                 ZStack {
-                    Circle().fill(t.tint).frame(width: 18, height: 18)
+                    Circle().fill(tgt.tint).frame(width: 18, height: 18)
                     Image(systemName: "checkmark")
                         .font(.system(size: 11, weight: .medium)).foregroundStyle(.white)
                 }
@@ -1366,9 +1755,9 @@ struct ContentView: View {
         }
         .buttonStyle(.plain)
         .background {
-            DS.tile.fill(t.tint.opacity(on ? 0.22 : 0))
-                .overlay(DS.tile.strokeBorder(t.tint.opacity(on ? 0.9 : 0), lineWidth: 2))
-                .shadow(color: t.tint.opacity(on ? 0.22 : 0), radius: 7, y: 4)
+            DS.tile.fill(tgt.tint.opacity(on ? 0.22 : 0))
+                .overlay(DS.tile.strokeBorder(tgt.tint.opacity(on ? 0.9 : 0), lineWidth: 2))
+                .shadow(color: tgt.tint.opacity(on ? 0.22 : 0), radius: 7, y: 4)
         }
         .glassEffect(.regular, in: DS.tile)
         .opacity(s.missing && !needsPick ? 0.55 : 1)
@@ -1376,15 +1765,15 @@ struct ContentView: View {
     }
 
     @ViewBuilder
-    private func tileIcon(_ t: Target) -> some View {
-        if m.exists(t) {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: m.fullPath(t)))
+    private func tileIcon(_ tgt: Target) -> some View {
+        if m.exists(tgt) {
+            Image(nsImage: NSWorkspace.shared.icon(forFile: m.fullPath(tgt)))
                 .resizable().frame(width: 34, height: 34)
         } else {
             ZStack {
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .fill(Color.secondary.opacity(0.14))
-                Image(systemName: t == .testCopy ? "plus" : "questionmark")
+                Image(systemName: tgt == .testCopy ? "plus" : "questionmark")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
@@ -1415,26 +1804,26 @@ struct ContentView: View {
             }
             .buttonStyle(.plain).foregroundStyle(.secondary)
             .disabled(value.wrappedValue == 100)
-            .help("恢复 100%")
+            .help(t("font.reset"))
         }
         .padding(.horizontal, 16).padding(.vertical, 11)
     }
 
     private var fontGroup: some View {
         VStack(alignment: .leading, spacing: 7) {
-            GroupLabel(text: "字体")
+            GroupLabel(text: t("font.group"))
             VStack(spacing: 0) {
                 HStack(spacing: 16) {
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("替换范围").font(.system(size: 14))
+                        Text(t("font.scope")).font(.system(size: 14))
                         Text(t("font.scope.desc"))
                             .font(.system(size: 12)).foregroundStyle(.secondary)
                     }
                     Spacer()
                     GlassSwitch(selection: $m.scope,
-                                options: [SwitchOption(value: "cjk", label: "中文"),
-                                          SwitchOption(value: "latin", label: "英文"),
-                                          SwitchOption(value: "both", label: "中英文")])
+                                options: [SwitchOption(value: "cjk", label: t("font.scope.cjk")),
+                                          SwitchOption(value: "latin", label: t("font.scope.latin")),
+                                          SwitchOption(value: "both", label: t("font.scope.both"))])
                         .frame(width: 220)
                 }
                 .padding(.horizontal, 16).padding(.vertical, 11)
@@ -1443,7 +1832,7 @@ struct ContentView: View {
                     Divider().opacity(0.5)
                         .transition(.opacity)
                     HStack(spacing: 16) {
-                        Text("中文字体").font(.system(size: 14))
+                        Text(t("font.cjk")).font(.system(size: 14))
                         Spacer()
                         fontMenu(selection: $m.fontFamily, list: m.fonts)
                     }
@@ -1451,7 +1840,7 @@ struct ContentView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
 
                     Divider().opacity(0.5).transition(.opacity)
-                    scaleRow("中文字号", $m.fontScale)
+                    scaleRow(t("font.cjk.size"), $m.fontScale)
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
 
@@ -1459,7 +1848,7 @@ struct ContentView: View {
                     Divider().opacity(0.5)
                         .transition(.opacity)
                     HStack(spacing: 16) {
-                        Text("英文字体").font(.system(size: 14))
+                        Text(t("font.latin")).font(.system(size: 14))
                         Spacer()
                         fontMenu(selection: $m.fontLatin, list: m.latinFonts)
                     }
@@ -1467,7 +1856,7 @@ struct ContentView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
 
                     Divider().opacity(0.5).transition(.opacity)
-                    scaleRow("英文字号", $m.fontScaleLatin)
+                    scaleRow(t("font.latin.size"), $m.fontScaleLatin)
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
 
@@ -1475,14 +1864,14 @@ struct ContentView: View {
 
                 HStack(spacing: 16) {
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("兼容模式").font(.system(size: 14))
+                        Text(t("font.mode")).font(.system(size: 14))
                         Text(t("font.mode.desc"))
                             .font(.system(size: 12)).foregroundStyle(.secondary)
                     }
                     Spacer()
                     GlassSwitch(selection: $m.mode,
-                                options: [SwitchOption(value: "auto", label: "标准"),
-                                          SwitchOption(value: "brute", label: "扩展")])
+                                options: [SwitchOption(value: "auto", label: t("font.mode.std")),
+                                          SwitchOption(value: "brute", label: t("font.mode.ext"))])
                         .frame(width: 170)
                 }
                 .padding(.horizontal, 16).padding(.vertical, 11)
@@ -1490,7 +1879,7 @@ struct ContentView: View {
                 Divider().opacity(0.5)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("预览").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text(t("font.preview.label")).font(.system(size: 11)).foregroundStyle(.secondary)
                     previewLine
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -1521,7 +1910,7 @@ struct ContentView: View {
     private func fontMenu(selection: Binding<String>, list: [FontChoice]) -> some View {
         Picker("", selection: selection) {
             ForEach(list) { f in
-                Text("\(fontRowTitle(f))   \(Text("字A").font(.custom(f.family, size: 15)))")
+                Text("\(fontRowTitle(f))   \(Text(t("font.sample")).font(.custom(f.family, size: 15)))")
                     .tag(f.family)
             }
         }
@@ -1542,8 +1931,8 @@ struct ContentView: View {
         GlassEffectContainer(spacing: 10) {
             HStack(spacing: 10) {
                 Button { m.install() } label: {
-                    Text(m.current.patched ? "重新应用到\(m.target.label)"
-                                           : "应用到\(m.target.label)")
+                    Text(t(m.current.patched ? "action.reapply" : "action.apply",
+                         ["{target}": m.target.label]))
                         .font(.system(size: 14, weight: .semibold))
                         .frame(maxWidth: .infinity).frame(height: 38)
                 }
@@ -1553,7 +1942,7 @@ struct ContentView: View {
                 .disabled(busyNow || !m.exists(m.target) || !toolsOK)
 
                 Button { m.doctor() } label: {
-                    Text("自检").font(.system(size: 14))
+                    Text(t("action.doctor")).font(.system(size: 14))
                         .frame(height: 38).padding(.horizontal, 20)
                 }
                 .buttonStyle(.glass)
@@ -1561,14 +1950,14 @@ struct ContentView: View {
                 .disabled(busyNow || !m.exists(m.target) || !toolsOK)
 
                 Button { m.openTarget() } label: {
-                    Text("打开").font(.system(size: 14))
+                    Text(t("action.open")).font(.system(size: 14))
                         .frame(height: 38).padding(.horizontal, 20)
                 }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.capsule)
                 .disabled(busyNow || !m.exists(m.target) || !toolsOK)
 
-                DestructiveButton(title: "还原") { confirmRestore = true }
+                DestructiveButton(title: t("action.restore")) { confirmRestore = true }
                     .disabled(busyNow || !m.exists(m.target) || !toolsOK)
             }
         }
@@ -1591,19 +1980,19 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 10) {
             Divider().opacity(0.5)
             HStack(spacing: 14) {
-                Button(logOpen ? "隐藏日志" : "显示日志（\(m.logLines.count)）") {
+                Button(logOpen ? t("log.hide") : t("log.show", ["{n}": String(m.logLines.count)])) {
                     logOpen.toggle()
                 }
                 .buttonStyle(.plain).font(.system(size: 13)).foregroundStyle(DS.accent)
 
                 if logOpen && !m.logLines.isEmpty {
-                    Button("清除日志") { m.log = "" }
+                    Button(t("log.clear")) { m.log = "" }
                         .buttonStyle(.plain).font(.system(size: 13)).foregroundStyle(.secondary)
                 }
                 Spacer()
                 HStack(spacing: 7) {
                     BreathingDot()
-                    Text("备份保护中，失败自动回滚")
+                    Text(t("log.guard"))
                         .font(.system(size: 12)).foregroundStyle(.secondary)
                 }
             }
@@ -1613,7 +2002,7 @@ struct ContentView: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 5) {
                             if m.logLines.isEmpty {
-                                Text("日志已清除")
+                                Text(t("log.cleared"))
                                     .font(.system(size: 12, design: .monospaced))
                                     .foregroundStyle(.tertiary)
                             }
@@ -1745,32 +2134,32 @@ struct ContentView: View {
                         helpStep(1, t("help.step1.title"), t("help.step1.body"))
 
                         helpStep(2, t("help.step2.title"), t("help.step2.body")) {
-                            ActionLine(lead: "在「测试 Claude」卡片上，点击", tail: "，约需 1 分钟") {
-                                BtnChip(title: "创建测试 Claude", kind: .link)
+                            ActionLine(lead: t("help.a2.lead"), tail: t("help.a2.tail")) {
+                                BtnChip(title: t("target.create"), kind: .link)
                             }
                         }
 
                         helpStep(3, t("help.step3.title"), t("help.step3.body")) {
                             VStack(alignment: .leading, spacing: 6) {
-                                ActionLine(lead: "替换范围") {
-                                    SegChip(options: ["中文", "英文", "中英文"], selected: 0)
+                                ActionLine(lead: t("font.scope")) {
+                                    SegChip(options: [t("font.scope.cjk"), t("font.scope.latin"), t("font.scope.both")], selected: 0)
                                 }
-                                ActionLine(lead: "兼容模式", tail: "不生效时再改用「扩展」") {
-                                    SegChip(options: ["标准", "扩展"], selected: 0)
+                                ActionLine(lead: t("font.mode"), tail: t("help.a3.tail")) {
+                                    SegChip(options: [t("font.mode.std"), t("font.mode.ext")], selected: 0)
                                 }
                             }
                         }
 
                         helpStep(4, t("help.step4.title"), t("help.step4.body")) {
-                            ActionLine(lead: "点击") { BtnChip(title: "应用到测试 Claude", kind: .primary) }
+                            ActionLine(lead: t("help.a4.lead")) { BtnChip(title: t("action.apply", ["{target}": t("target.test")]), kind: .primary) }
                         }
 
                         helpStep(5, t("help.step5.title"), t("help.step5.body")) {
-                            ActionLine(lead: "点击") { BtnChip(title: "打开", kind: .glass) }
+                            ActionLine(lead: t("help.a4.lead")) { BtnChip(title: t("action.open"), kind: .glass) }
                         }
 
                         helpStep(6, t("help.step6.title"), t("help.step6.body")) {
-                            ActionLine(lead: "点击") { BtnChip(title: "应用到正式 Claude", kind: .primary) }
+                            ActionLine(lead: t("help.a4.lead")) { BtnChip(title: t("action.apply", ["{target}": t("target.prod")]), kind: .primary) }
                         }
 
                         helpStep(7, t("help.step7.title"), t("help.step7.body"))
@@ -1778,10 +2167,10 @@ struct ContentView: View {
                         helpStep(8, t("help.step8.title"), t("help.step8.body"))
 
                         helpStep(9, t("help.step9.title"), t("help.step9.body")) {
-                            ActionLine(lead: "点击") {
+                            ActionLine(lead: t("help.a4.lead")) {
                                 HStack(spacing: 6) {
-                                    BtnChip(title: "还原", kind: .danger)
-                                    BtnChip(title: "自检", kind: .glass)
+                                    BtnChip(title: t("action.restore"), kind: .danger)
+                                    BtnChip(title: t("action.doctor"), kind: .glass)
                                 }
                             }
                         }
@@ -1796,7 +2185,7 @@ struct ContentView: View {
                     Text(t("help.footer"))
                         .font(.system(size: 11.5)).foregroundStyle(.secondary)
                     Spacer()
-                    Button("知道了") { showHelp = false }
+                    Button(t("sheet.ok")) { showHelp = false }
                         .buttonStyle(.glassProminent).tint(DS.accent).controlSize(.large)
                 }
                 .padding(.horizontal, 24).padding(.vertical, 14)
@@ -1813,9 +2202,9 @@ struct ContentView: View {
     private func noteBlock(_ n: ReleaseNote) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Text("版本 \(n.version)").font(.system(size: 14, weight: .semibold))
+                Text(t("release.version", ["{v}": n.version])).font(.system(size: 14, weight: .semibold))
                 if n.version == appVersion {
-                    Text("当前版本")
+                    Text(t("release.current"))
                         .font(.system(size: 10.5, weight: .medium))
                         .foregroundStyle(DS.accent)
                         .padding(.horizontal, 7).padding(.vertical, 2)
@@ -1855,7 +2244,7 @@ struct ContentView: View {
                         Image(systemName: "sparkles")
                             .font(.system(size: 15, weight: .medium))
                             .foregroundStyle(DS.accent)
-                        Text("新特性").font(.system(size: 17, weight: .semibold)).tracking(-0.17)
+                        Text(t("header.whatsnew")).font(.system(size: 17, weight: .semibold)).tracking(-0.17)
                     }
                     Spacer()
                     Button { showWhatsNew = false } label: {
@@ -1880,7 +2269,7 @@ struct ContentView: View {
                 HStack {
                     UpdateCheckButton()
                     Spacer()
-                    Button("知道了") { showWhatsNew = false }
+                    Button(t("sheet.ok")) { showWhatsNew = false }
                         .buttonStyle(.glassProminent).tint(DS.accent).controlSize(.large)
                 }
                 .padding(.horizontal, 24).padding(.vertical, 14)
@@ -1907,17 +2296,17 @@ struct ContentView: View {
                             .foregroundStyle(DS.danger)
                     }
                     VStack(alignment: .leading, spacing: 5) {
-                        Text("确认还原 Claude 字体？")
+                        Text(t("sheet.restore.title"))
                             .font(.system(size: 15, weight: .semibold)).tracking(-0.15)
-                        Text("会从备份恢复\(m.target.label)的 app.asar 并重新签名，"
-                             + "当前的\(m.current.font.isEmpty ? m.fontFamily : m.current.font)"
-                             + "设置将被移除。Claude 需要退出后重新打开。")
+                        Text(t("sheet.restore.body",
+                               ["{target}": m.target.label,
+                                "{font}": m.current.font.isEmpty ? m.fontFamily : m.current.font]))
                             .font(.system(size: 12.5)).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                Text(m.current.backups.first.map { "备份 " + $0 }
-                     ?? "没有整包备份，将用 app.asar.bak 原版留底还原")
+                Text(m.current.backups.first.map { t("sheet.restore.backup", ["{name}": $0]) }
+                     ?? t("sheet.restore.nobackup"))
                     .font(.system(size: 11.5, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 11).padding(.vertical, 8)
@@ -1926,9 +2315,9 @@ struct ContentView: View {
                         .fill(Color.secondary.opacity(0.09)))
                 HStack(spacing: 9) {
                     Spacer()
-                    Button("取消") { confirmRestore = false }
+                    Button(t("sheet.cancel")) { confirmRestore = false }
                         .buttonStyle(.glass).controlSize(.large)
-                    Button("还原") { confirmRestore = false; m.uninstall() }
+                    Button(t("action.restore")) { confirmRestore = false; m.uninstall() }
                         .buttonStyle(.glassProminent).tint(DS.danger).controlSize(.large)
                 }
             }
@@ -1964,7 +2353,7 @@ enum Updater {
     static func latest() async -> Result {
         guard !repo.isEmpty,
               let api = URL(string: "https://api.github.com/repos/\(repo)/releases/latest")
-        else { return .failed("仓库地址没配置") }
+        else { return .failed(t("update.err.norepo")) }
         var req = URLRequest(url: api)
         req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         req.timeoutInterval = 12
@@ -1974,12 +2363,12 @@ enum Updater {
             // 404 既可能是仓库还没发过 Release，也可能是仓库名写错了；
             // 对用户来说结论一样：现在没有可下载的版本。
             if code == 404 { return .noRelease }
-            if code == 403 { return .failed("GitHub 限流了，过一会儿再试") }
-            guard code == 200 else { return .failed("GitHub 返回 \(code)") }
+            if code == 403 { return .failed(t("update.err.rate")) }
+            guard code == 200 else { return .failed(t("update.err.code", ["{code}": String(code)])) }
             guard let j = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let tag = j["tag_name"] as? String,
                   let link = j["html_url"] as? String, let page = URL(string: link)
-            else { return .failed("发布信息解析失败") }
+            else { return .failed(t("update.err.parse")) }
             return .release(Release(tag: tag, page: page))
         } catch {
             return .failed(error.localizedDescription)
@@ -2068,11 +2457,11 @@ struct UpdateCheckButton: View {
 
     @ViewBuilder private var button: some View {
         if let r = newRelease {
-            Button { NSWorkspace.shared.open(r.page) } label: { label("前往下载") }
+            Button { NSWorkspace.shared.open(r.page) } label: { label(t("update.download")) }
                 .buttonStyle(.glassProminent)
                 .buttonBorderShape(.capsule).tint(DS.accent)
         } else {
-            Button { check() } label: { label("检查更新") }
+            Button { check() } label: { label(t("update.check")) }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.capsule)
                 .disabled(checking)
@@ -2100,7 +2489,7 @@ struct UpdateCheckButton: View {
 
     private func check() {
         guard !Updater.repo.isEmpty else {
-            note = "还没上架 GitHub，暂时没有可检查的版本。"
+            note = t("update.norepo")
             return
         }
         checking = true; note = ""
@@ -2113,14 +2502,14 @@ struct UpdateCheckButton: View {
             case .release(let r):
                 if Updater.isNewer(r.tag, than: Updater.version) {
                     newRelease = r
-                    note = "有新版本 \(r.tag)。"
+                    note = t("update.found", ["{tag}": r.tag])
                 } else {
-                    note = "已是最新版本。"
+                    note = t("update.latest")
                 }
             case .noRelease:
-                note = "仓库里还没有发布任何版本。"
+                note = t("update.norelease")
             case .failed(let why):
-                note = "检查失败：\(why)"
+                note = t("update.failed", ["{why}": why])
             }
         }
     }
@@ -2129,6 +2518,7 @@ struct UpdateCheckButton: View {
 struct AboutView: View {
     /// 只为让开关能刷新界面；实际读写走 UserDefaults
     @AppStorage("autoCheckUpdates") private var autoCheck = true
+    @ObservedObject private var copy = Copy.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -2137,10 +2527,10 @@ struct AboutView: View {
                     .resizable().frame(width: 96, height: 96)
                 VStack(spacing: 3) {
                     Text("Clfont").font(.system(size: 22, weight: .semibold)).tracking(-0.2)
-                    Text("版本 \(Updater.version)（\(Updater.build)）")
+                    Text(t("about.version", ["{v}": Updater.version, "{b}": Updater.build]))
                         .font(.system(size: 12)).foregroundStyle(.secondary)
                 }
-                Text("替换 Claude 桌面版界面的显示字体，支持中文、英文或中英文")
+                Text(t("about.tagline"))
                     .font(.system(size: 12.5)).foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
@@ -2151,9 +2541,21 @@ struct AboutView: View {
 
             VStack(spacing: 12) {
                 HStack(spacing: 8) {
-                    Text("开发者").font(.system(size: 12)).foregroundStyle(.secondary)
+                    Text(t("about.dev")).font(.system(size: 12)).foregroundStyle(.secondary)
                     Spacer()
-                    Text("赵万（Jovan）").font(.system(size: 12.5, weight: .medium))
+                    Text(t("about.devname")).font(.system(size: 12.5, weight: .medium))
+                }
+
+                HStack(spacing: 8) {
+                    Text(t("about.lang")).font(.system(size: 12)).foregroundStyle(.secondary)
+                    Spacer()
+                    Picker("", selection: $copy.lang) {
+                        Text(t("about.lang.auto")).tag(Lang.auto)
+                        Text("中文").tag(Lang.zh)
+                        Text("English").tag(Lang.en)
+                    }
+                    .pickerStyle(.menu).labelsHidden().fixedSize()
+                    .font(.system(size: 12.5))
                 }
 
                 Toggle(t("update.auto"), isOn: $autoCheck)
@@ -2166,7 +2568,7 @@ struct AboutView: View {
 
             Divider().opacity(0.5)
 
-            Text("仅修改本机安装的 Claude 应用包，不读取账号与会话数据")
+            Text(t("about.footer"))
                 .font(.system(size: 11)).foregroundStyle(.tertiary)
                 .padding(.horizontal, 28).padding(.vertical, 12)
         }
@@ -2178,7 +2580,7 @@ struct AboutView: View {
 private struct AboutCommand: View {
     @Environment(\.openWindow) private var openWindow
     var body: some View {
-        Button("关于 Clfont") { openWindow(id: "about") }
+        Button(t("about.title")) { openWindow(id: "about") }
     }
 }
 
@@ -2192,7 +2594,7 @@ struct ClfontApp: App {
                 CommandGroup(replacing: .appInfo) { AboutCommand() }
             }
 
-        Window("关于 Clfont", id: "about") { AboutView() }
+        Window(t("about.title"), id: "about") { AboutView() }
             .windowStyle(.hiddenTitleBar)
             .windowResizability(.contentSize)
     }
