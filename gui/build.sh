@@ -20,6 +20,10 @@ swiftc -swift-version 5 -O -parse-as-library \
 swiftc -O -swift-version 5 -target arm64-apple-macos26.0 \
   -o "$OUT/Contents/Resources/clfont" "$ROOT"/cli/*.swift
 chmod +x "$OUT/Contents/Resources/clfont"
+# 权限引导用的示意图，随包分发
+mkdir -p "$OUT/Contents/Resources"
+cp "$ROOT"/gui/assets/*.png "$OUT/Contents/Resources/"
+
 for sh in setup-test-copy remove-test-copy; do
   cp "$ROOT/gui/$sh.sh" "$OUT/Contents/Resources/$sh.sh"
   chmod +x "$OUT/Contents/Resources/$sh.sh"

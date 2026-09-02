@@ -212,7 +212,20 @@ final class Copy: ObservableObject {
         "msg.openfail": "✗ 启动测试 Claude 失败：{err}",
 
         // —— 弹层
+        "sheet.apply.title": "确认应用",
+        "sheet.apply.body": "当前选择的目标是「{target}」。应用将修改该应用的字体渲染，全程有完整备份，任一环节失败都会自动恢复原样。",
+        "sheet.apply.go": "应用",
+
+        "sheet.applying.title": "正在应用",
+        "sheet.applying.perm": "首次使用或 Clfont 更新后，系统可能拦截本次修改并显示下方提示。请点击其中的「允许…」；若已错过该提示，请前往「系统设置 → 隐私与安全性 → App 管理」，为 Clfont 打开开关后重新执行。",
+        "sheet.applying.hint": "此窗口会在完成后自动关闭，期间请勿关闭应用。",
+
+        "sheet.restart.title": "即将重新启动 Claude",
+        "sheet.restart.body": "重新签名后首次启动时，系统会请求访问钥匙串项「Claude Safe Storage」。请输入 Mac 的登录密码（即解锁屏幕所用的密码）并选择「始终允许」，登录状态方可保留。该请求可能连续出现数次，每次处理方式相同。",
+        "sheet.restart.manual": "若未自动启动，请点击下方按钮。",
+        "sheet.restart.launch": "启动 Claude",
         "sheet.cancel": "取消",
+        "sheet.close": "关闭",
         "sheet.ok": "知道了",
         "sheet.delete.title": "彻底删除测试 Claude？",
         "sheet.delete.ok": "删除",
@@ -419,7 +432,20 @@ final class Copy: ObservableObject {
         "msg.opened": "· Test Claude launched (separate profile)",
         "msg.openfail": "✗ Could not launch the test Claude: {err}",
 
+        "sheet.apply.title": "Apply the changes?",
+        "sheet.apply.body": "The selected target is {target}. Applying changes how that app renders text. A full backup is taken first, and any step that fails puts everything back.",
+        "sheet.apply.go": "Apply",
+
+        "sheet.applying.title": "Applying",
+        "sheet.applying.perm": "On a first run, or after Clfont updates, macOS may block the change and show the notice below. Click Allow. If you missed it, open System Settings → Privacy & Security → App Management, switch Clfont on, and run this again.",
+        "sheet.applying.hint": "This window closes on its own when the work is done. Leave the app running.",
+
+        "sheet.restart.title": "Claude is about to restart",
+        "sheet.restart.body": "Re-signing means the first launch asks for the \"Claude Safe Storage\" keychain item. Enter your Mac login password — the one that unlocks the screen — and choose Always Allow, so your session carries over. It may ask several times over; answer it the same way each time.",
+        "sheet.restart.manual": "If it does not start on its own, use the button below.",
+        "sheet.restart.launch": "Launch Claude",
         "sheet.cancel": "Cancel",
+        "sheet.close": "Close",
         "sheet.ok": "Got it",
         "sheet.delete.title": "Delete the test Claude?",
         "sheet.delete.ok": "Delete",
@@ -1141,7 +1167,7 @@ final class OutputBox: @unchecked Sendable {
         }
     }
 
-    func install() {
+    func install(done: (@MainActor (Bool) -> Void)? = nil) {
         saveConfig()
         let tgt = target
         exec(["install", "-y", "--scope", scope, "--mode", mode,
@@ -1153,9 +1179,10 @@ final class OutputBox: @unchecked Sendable {
               "--latin-scope", latinScope,
               "--scale-ui", String(Int(fontScaleUI.rounded()))], on: tgt,
              label: t("busy.install", ["{target}": tgt.label])) {
-            [weak self] _, out in
+            [weak self] code, out in
             self?.noteAppMgmt(out)
             self?.refresh(tgt)
+            done?(code == 0)
         }
     }
 
@@ -1437,6 +1464,9 @@ struct ContentView: View {
     @State private var detailOpen = false
     @State private var logOpen = false
     @State private var confirmRestore = false
+    @State private var confirmApply = false
+    @State private var showApplying = false
+    @State private var showRestart = false
     @State private var showHelp = false
     @State private var showWhatsNew = false
     @StateObject private var updates = UpdateWatcher()
@@ -1478,7 +1508,10 @@ struct ContentView: View {
 #endif
     }
 
-    private var sheetOpen: Bool { confirmRestore || showHelp || showWhatsNew }
+    private var sheetOpen: Bool {
+        confirmRestore || showHelp || showWhatsNew
+            || confirmApply || showApplying || showRestart
+    }
 
     /// 主界面本体；调试版会在它右侧并排放一个调试面板
     private var mainColumn: some View {
@@ -1499,6 +1532,9 @@ struct ContentView: View {
         // 给它一个超出窗口的固定高度，免得隐藏标题栏那 32pt 露出窗口底色
         .background { backdrop.frame(height: 1400) }
         .overlay { if confirmRestore { restoreSheet } }
+        .overlay { if confirmApply { applyConfirmSheet } }
+        .overlay { if showApplying { applyingSheet } }
+        .overlay { if showRestart { restartSheet } }
         .overlay { if showHelp { helpSheet } }
         .overlay { if showWhatsNew { whatsNewSheet } }
     }
@@ -1525,6 +1561,9 @@ struct ContentView: View {
         .animation(DS.pop, value: detailOpen)
         .animation(DS.pop, value: logOpen)
         .animation(DS.pop, value: confirmRestore)
+        .animation(DS.pop, value: confirmApply)
+        .animation(DS.pop, value: showApplying)
+        .animation(DS.pop, value: showRestart)
         .animation(DS.pop, value: showHelp)
         .animation(DS.pop, value: showWhatsNew)
         .alert(t("sheet.delete.title"), isPresented: $confirmRemove) {
@@ -2216,7 +2255,7 @@ struct ContentView: View {
     private var actions: some View {
         GlassEffectContainer(spacing: 10) {
             HStack(spacing: 10) {
-                Button { m.install() } label: {
+                Button { confirmApply = true } label: {
                     Text(t(m.current.patched ? "action.reapply" : "action.apply",
                          ["{target}": m.target.label]))
                         .font(.system(size: 14, weight: .semibold))
@@ -2593,6 +2632,142 @@ struct ContentView: View {
     }
 
     // MARK: 还原确认
+
+    /// 应用前的确认。这是唯一会改动 Claude 的操作，值得停一下确认目标选对了——
+    /// 正式版和测试副本的卡片长得几乎一样，点错的代价不小。
+    private var applyConfirmSheet: some View {
+        ZStack {
+            scrim { confirmApply = false }
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 13) {
+                    ZStack {
+                        Circle().fill(DS.accent.opacity(0.16)).frame(width: 34, height: 34)
+                        Image(systemName: "textformat")
+                            .font(.system(size: 15, weight: .medium)).foregroundStyle(DS.accent)
+                    }
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(t("sheet.apply.title"))
+                            .font(.system(size: 15, weight: .semibold)).tracking(-0.15)
+                        Text(t("sheet.apply.body", ["{target}": m.target.label]))
+                            .font(.system(size: 12.5)).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                HStack(spacing: 9) {
+                    Spacer()
+                    Button(t("sheet.cancel")) { confirmApply = false }
+                        .buttonStyle(.glass).controlSize(.large)
+                    Button(t("sheet.apply.go")) { startApply() }
+                        .buttonStyle(.glassProminent).tint(DS.accent).controlSize(.large)
+                }
+            }
+            .padding(.horizontal, 24).padding(.top, 22).padding(.bottom, 18)
+            .frame(width: 392)
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .shadow(color: .black.opacity(0.3), radius: 25, y: 22)
+            .transition(.scale(scale: 0.96).combined(with: .opacity))
+        }
+    }
+
+    /// 应用过程中一直显示。放权限引导图是因为系统那条拦截提示很容易被忽略，
+    /// 而错过之后表现就是「点了没反应」——图摆在眼前，用户知道该点什么。
+    private var applyingSheet: some View {
+        ZStack {
+            scrim { }
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 11) {
+                    ProgressView().controlSize(.small)
+                    Text(t("sheet.applying.title"))
+                        .font(.system(size: 15, weight: .semibold)).tracking(-0.15)
+                }
+                if !m.busyLabel.isEmpty {
+                    Text(m.busyLabel)
+                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Divider().opacity(0.5)
+                Text(t("sheet.applying.perm"))
+                    .font(.system(size: 12.5)).foregroundStyle(.secondary)
+                    .lineSpacing(2.5)
+                    .fixedSize(horizontal: false, vertical: true)
+                VStack(spacing: 9) {
+                    guideImage("permission-alert")
+                    guideImage("permission-settings")
+                }
+                Text(t("sheet.applying.hint"))
+                    .font(.system(size: 11.5)).foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 24).padding(.top, 22).padding(.bottom, 18)
+            .frame(width: 430)
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .shadow(color: .black.opacity(0.3), radius: 25, y: 22)
+            .transition(.scale(scale: 0.96).combined(with: .opacity))
+        }
+    }
+
+    /// 应用完成后、重启 Claude 前。钥匙串请求会连着弹几次，事先说明比事后解释
+    /// 有用得多——不解释的话，那几个要密码的弹窗看着很像出了问题。
+    private var restartSheet: some View {
+        ZStack {
+            scrim { showRestart = false }
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 13) {
+                    ZStack {
+                        Circle().fill(DS.success.opacity(0.16)).frame(width: 34, height: 34)
+                        Image(systemName: "key")
+                            .font(.system(size: 15, weight: .medium)).foregroundStyle(DS.success)
+                    }
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(t("sheet.restart.title"))
+                            .font(.system(size: 15, weight: .semibold)).tracking(-0.15)
+                        Text(t("sheet.restart.body"))
+                            .font(.system(size: 12.5)).foregroundStyle(.secondary)
+                            .lineSpacing(2.5)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Text(t("sheet.restart.manual"))
+                    .font(.system(size: 11.5)).foregroundStyle(.tertiary)
+                HStack(spacing: 9) {
+                    Spacer()
+                    Button(t("sheet.restart.launch")) { m.openTarget(); showRestart = false }
+                        .buttonStyle(.glassProminent).tint(DS.accent).controlSize(.large)
+                    Button(t("sheet.close")) { showRestart = false }
+                        .buttonStyle(.glass).controlSize(.large)
+                }
+            }
+            .padding(.horizontal, 24).padding(.top, 22).padding(.bottom, 18)
+            .frame(width: 420)
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .shadow(color: .black.opacity(0.3), radius: 25, y: 22)
+            .transition(.scale(scale: 0.96).combined(with: .opacity))
+        }
+    }
+
+    private func guideImage(_ name: String) -> some View {
+        Group {
+            if let url = Bundle.main.url(forResource: name, withExtension: "png"),
+               let img = NSImage(contentsOf: url) {
+                Image(nsImage: img).resizable().scaledToFit()
+                    .frame(maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1))
+            }
+        }
+    }
+
+    /// 应用的完整流程：确认 → 进度（含权限引导）→ 完成后提示并重启 Claude。
+    private func startApply() {
+        confirmApply = false
+        showApplying = true
+        m.install { ok in
+            showApplying = false
+            guard ok else { return }          // 失败时留在主界面，日志已有原因
+            showRestart = true
+            m.openTarget()
+        }
+    }
 
     private var restoreSheet: some View {
         ZStack {
