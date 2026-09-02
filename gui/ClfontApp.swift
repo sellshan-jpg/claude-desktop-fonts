@@ -146,7 +146,7 @@ final class Copy: ObservableObject {
         "font.latin": "英文字体",
         "font.latin.size": "英文字号",
         "font.latin.where": "英文替换范围",
-        "font.latin.where.desc": "仅回复 只修改 Claude 的回复与标题；全部 将会连带界面、输入框和用户发送的消息一起修改",
+        "font.latin.where.desc": "「仅回复」只修改 Claude 的回复与标题；「全部」将会连带界面、输入框和用户发送的消息一起修改",
         "font.latin.body": "仅回复",
         "font.latin.all": "全部",
         "font.ui.size": "侧栏和底栏字号优化",
