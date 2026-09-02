@@ -2699,11 +2699,33 @@ struct ContentView: View {
                         .font(.system(size: 12)).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+
+                // 实时日志。这几步要跑一两分钟，只给一个转圈的话，用户无从判断
+                // 是在干活还是卡住了——把 CLI 的输出直接摊开最省解释。
+                ScrollViewReader { sp in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 5) {
+                            ForEach(Array(m.logLines.enumerated()), id: \.offset) { i, line in
+                                logRow(line).id(i)
+                            }
+                            Color.clear.frame(height: 1).id("tail")
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 12).padding(.vertical, 10)
+                    }
+                    .frame(height: 190)
+                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.secondary.opacity(0.08)))
+                    .onChange(of: m.log) { _, _ in
+                        withAnimation(.easeOut(duration: 0.15)) { sp.scrollTo("tail", anchor: .bottom) }
+                    }
+                }
+
                 Text(t("sheet.applying.hint"))
                     .font(.system(size: 11.5)).foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 24).padding(.top, 22).padding(.bottom, 18)
-            .frame(width: 380)
+            .frame(width: 470)
             .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .shadow(color: .black.opacity(0.3), radius: 25, y: 22)
             .transition(.scale(scale: 0.96).combined(with: .opacity))
