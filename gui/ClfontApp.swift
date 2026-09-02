@@ -150,13 +150,20 @@ final class Copy: ObservableObject {
         "font.latin.body": "仅回复",
         "font.latin.all": "全部",
         "font.ui.size": "侧栏和底栏字号优化",
-        "font.ui.desc": "侧栏和底栏的字只有 12–13px，跟着正文一起放大只多一个多像素，看不出来，所以单独拆出来调。这一项同时也管输入框和你发出的消息",
+        "font.ui.desc": "管侧栏、底栏、输入框和你发出的消息。单独拆出来是因为这些位置本身只有 12–13px，跟着正文一起放大只多一个多像素，看不出来",
         "font.mode": "兼容模式",
         "font.mode.std": "标准",
         "font.mode.ext": "扩展",
         "font.preview.label": "预览",
         "font.reset": "恢复 100%",
         "font.sample": "字A",
+        "font.sec.cjk": "中文",
+        "font.sec.latin": "英文",
+        "font.sec.ui": "界面",
+        "font.sec.other": "其他",
+        "row.font": "字体",
+        "row.size": "字号",
+        "row.apply": "作用范围",
 
         // —— 代码块
         "code.group": "代码块",
@@ -356,13 +363,20 @@ final class Copy: ObservableObject {
         "font.latin.body": "Replies only",
         "font.latin.all": "Everything",
         "font.ui.size": "Sidebar and bottom bar",
-        "font.ui.desc": "The sidebar and bottom bar sit at 12–13px, where scaling along with the body adds barely a pixel. This dial handles them separately, and covers the composer and the messages you send too",
+        "font.ui.desc": "Covers the sidebar, the bottom bar, the composer and the messages you send. Split out because these sit at 12–13px, where scaling with the body adds barely a pixel",
         "font.mode": "Compatibility",
         "font.mode.std": "Standard",
         "font.mode.ext": "Extended",
         "font.preview.label": "Preview",
         "font.reset": "Reset to 100%",
         "font.sample": "Aa字",
+        "font.sec.cjk": "CHINESE",
+        "font.sec.latin": "ENGLISH",
+        "font.sec.ui": "INTERFACE",
+        "font.sec.other": "OTHER",
+        "row.font": "Font",
+        "row.size": "Size",
+        "row.apply": "Applies to",
 
         "code.group": "Code blocks",
         "code.font": "Code font",
@@ -2037,6 +2051,24 @@ struct ContentView: View {
         .help(hex.isEmpty ? label : "\(label)  \(hex)")
     }
 
+    /// 卡片内的小分组标题。一张卡里同时有三个「字号」、两个「范围」，
+    /// 平铺开谁也分不清哪个管哪儿；按「中文 / 英文 / 界面」分段之后，
+    /// 行标签就能把重复的前缀去掉，只留「字体」「字号」。
+    private func cardSection(_ title: String) -> some View {
+        VStack(spacing: 0) {
+            Divider().opacity(0.5)
+            HStack {
+                Text(title)
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(0.6)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 11).padding(.bottom, 5)
+        }
+    }
+
     private var fontGroup: some View {
         VStack(alignment: .leading, spacing: 7) {
             GroupLabel(text: t("font.group"))
@@ -2058,47 +2090,42 @@ struct ContentView: View {
 
                 if m.replacesCJK {
                     VStack(spacing: 0) {
-                        Divider().opacity(0.5)
+                        cardSection(t("font.sec.cjk"))
                         HStack(spacing: 16) {
-                            Text(t("font.cjk")).font(.system(size: 14))
+                            Text(t("row.font")).font(.system(size: 14))
                             Spacer()
                             fontMenu(selection: $m.fontFamily, list: m.fonts)
                         }
-                        .padding(.horizontal, 16).padding(.vertical, 11)
-                        Divider().opacity(0.5)
-                        scaleRow(t("font.cjk.size"), $m.fontScale)
+                        .padding(.horizontal, 16).padding(.vertical, 9)
+                        scaleRow(t("row.size"), $m.fontScale)
                     }
                     .transition(DS.rowInsert)
                 }
 
                 if m.replacesLatin {
                     VStack(spacing: 0) {
-                    Divider().opacity(0.5)
-                    HStack(spacing: 16) {
-                        Text(t("font.latin")).font(.system(size: 14))
-                        Spacer()
-                        fontMenu(selection: $m.fontLatin, list: m.latinFonts)
-                    }
-                    .padding(.horizontal, 16).padding(.vertical, 11)
-
-                    Divider().opacity(0.5)
-                    scaleRow(t("font.latin.size"), $m.fontScaleLatin)
-
-                    Divider().opacity(0.5)
-                    HStack(spacing: 16) {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(t("font.latin.where")).font(.system(size: 14))
-                            Text(t("font.latin.where.desc"))
-                                .font(.system(size: 12)).foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
+                        cardSection(t("font.sec.latin"))
+                        HStack(spacing: 16) {
+                            Text(t("row.font")).font(.system(size: 14))
+                            Spacer()
+                            fontMenu(selection: $m.fontLatin, list: m.latinFonts)
                         }
-                        Spacer()
-                        GlassSwitch(selection: $m.latinScope,
-                                    options: [SwitchOption(value: "body", label: t("font.latin.body")),
-                                              SwitchOption(value: "all", label: t("font.latin.all"))])
-                            .frame(width: 170)
-                    }
-                    .padding(.horizontal, 16).padding(.vertical, 11)
+                        .padding(.horizontal, 16).padding(.vertical, 9)
+                        scaleRow(t("row.size"), $m.fontScaleLatin)
+                        HStack(spacing: 16) {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(t("row.apply")).font(.system(size: 14))
+                                Text(t("font.latin.where.desc"))
+                                    .font(.system(size: 12)).foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer()
+                            GlassSwitch(selection: $m.latinScope,
+                                        options: [SwitchOption(value: "body", label: t("font.latin.body")),
+                                                  SwitchOption(value: "all", label: t("font.latin.all"))])
+                                .frame(width: 170)
+                        }
+                        .padding(.horizontal, 16).padding(.vertical, 9)
                     }
                     .transition(DS.rowInsert)
                 }
@@ -2106,10 +2133,9 @@ struct ContentView: View {
                 // 界面字体族被覆盖时这一项才有意义：换中文时它一直生效（侧栏的
                 // 聊天标题就是中文），换英文时只在「全部」下生效。
                 if m.uiScaleApplies {
-                    // 分隔线与内容合成一个整体过渡；分开各动各的会脱节
                     VStack(alignment: .leading, spacing: 2) {
-                        Divider().opacity(0.5)
-                        scaleRow(t("font.ui.size"), $m.fontScaleUI)
+                        cardSection(t("font.sec.ui"))
+                        scaleRow(t("row.size"), $m.fontScaleUI)
                         Text(t("font.ui.desc"))
                             .font(.system(size: 12)).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -2118,8 +2144,7 @@ struct ContentView: View {
                     .transition(DS.rowInsert)
                 }
 
-                Divider().opacity(0.5)
-
+                cardSection(t("font.sec.other"))
                 HStack(spacing: 16) {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(t("font.mode")).font(.system(size: 14))
@@ -2132,7 +2157,7 @@ struct ContentView: View {
                                           SwitchOption(value: "brute", label: t("font.mode.ext"))])
                         .frame(width: 170)
                 }
-                .padding(.horizontal, 16).padding(.vertical, 11)
+                .padding(.horizontal, 16).padding(.vertical, 9)
 
                 Divider().opacity(0.5)
 
