@@ -1525,12 +1525,22 @@ struct ContentView: View {
     private var mainColumn: some View {
         // 窗口高度跟着内容走（详情 / 日志就地展开），但不越过屏幕可见区域；
         // 真超出了才让内容自己滚，不然什么都点不到。
-        ScrollView {
-            content.background {
-                GeometryReader { g in
-                    Color.clear
-                        .onAppear { contentH = g.size.height }
-                        .onChange(of: g.size.height) { _, h in contentH = h }
+        ScrollViewReader { sp in
+            ScrollView {
+                content.background {
+                    GeometryReader { g in
+                        Color.clear
+                            .onAppear { contentH = g.size.height }
+                            .onChange(of: g.size.height) { _, h in contentH = h }
+                    }
+                }
+            }
+            // 权限缺失的提示条在最顶上，而用户点「应用」时多半正停在下面的设置区，
+            // 提示出现在视野外，看着就像「点了没反应」。这里把视图拉回顶部。
+            .onChange(of: m.appMgmtDenied) { _, denied in
+                guard denied else { return }
+                DispatchQueue.main.async {
+                    withAnimation(DS.ease24) { sp.scrollTo("top", anchor: .top) }
                 }
             }
         }
@@ -1661,6 +1671,7 @@ struct ContentView: View {
 
     private var content: some View {
         VStack(alignment: .leading, spacing: 20) {
+            Color.clear.frame(height: 0).id("top")
             appHeader
             statusCard
             if m.appMgmtDenied { appMgmtNotice }
