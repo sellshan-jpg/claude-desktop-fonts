@@ -51,8 +51,8 @@ final class Copy: ObservableObject {
         "help.safety.b2": "不读取、不上传账号信息与聊天记录，全部操作都在本机完成。",
         "help.safety.b3": "安装前会创建完整备份，任一环节失败或中途取消都会把文件恢复原样，随时可用「还原」完全撤销。",
         "help.safety.title": "关于安全性",
-        "help.step1.body": "Clfont 的实际操作由一段脚本完成，它依赖 macOS 的 python3，而该组件由 Xcode 命令行工具提供。未安装时窗口顶部会出现提示，点击其中的「安装命令行工具」按系统引导完成即可，无需下载完整的 Xcode。\n此外，修改 Claude 的应用包需要「App 管理」权限，macOS 会在第一次执行安装时弹出系统请求，请选择「允许」。若此前误选了「不允许」，请前往「系统设置 → 隐私与安全性 → App 管理」，为 Clfont 打开开关后重新执行。本工具不需要「辅助功能」权限。",
-        "help.step1.title": "首次使用：命令行工具与「App 管理」权限",
+        "help.step1.body": "修改 Claude 的应用包需要「App 管理」权限，macOS 会在第一次执行安装时弹出系统请求，请选择「允许」。若此前误选了「不允许」，请前往「系统设置 → 隐私与安全性 → App 管理」，为 Clfont 打开开关后重新执行。\n除此之外不需要任何额外组件：本工具不依赖 Xcode 命令行工具，也不需要「辅助功能」权限。",
+        "help.step1.title": "首次使用：「App 管理」权限",
         "help.step2.body": "应用修改需要对 Claude 重新签名，正式版的原始签名会因此被替换。为避免对日常使用的应用反复改动，建议每次更换字体时先在测试 Claude 上确认效果。测试 Claude 是正式版的完整副本，使用独立的应用标识与配置目录，与正式版互不影响。",
         "help.step2.title": "建议先在测试 Claude 上验证",
         "help.step3.body": "「替换范围」决定替换哪种文字。「中文」只改中文字形，界面图标不受影响，也是推荐选项；「英文」与「中英文」会一并改变界面英文的观感，若之后发现个别图标显示异常，请改回「中文」。选定范围后在下方选择对应字体，预览会立即更新。",
@@ -71,10 +71,6 @@ final class Copy: ObservableObject {
         "help.step9.title": "还原与自检",
         "help.title": "如何使用 Clfont",
         "target.hint": "建议先在测试 Claude 上确认字体效果，再应用到正式 Claude。",
-        "toolchain.body": "Clfont 的实际操作由一段脚本完成，它依赖 macOS 的 python3，而该组件由 Xcode 命令行工具提供。未安装时无法执行任何修改，你的 Claude 也不会被改动。",
-        "toolchain.install": "安装命令行工具",
-        "toolchain.recheck": "我已安装，重新检测",
-        "toolchain.title": "需要先安装 Xcode 命令行工具",
         "stale.action": "重新应用",
         "appmgmt.body": "修改 Claude 的应用包需要「App 管理」权限。系统会在第一次执行时弹出请求，若此前选择了「不允许」，请点击下方按钮前往设置，为 Clfont 打开开关后重新执行。",
         "appmgmt.open": "打开「App 管理」设置",
@@ -228,8 +224,8 @@ final class Copy: ObservableObject {
         "help.safety.b2": "No account details or conversations are read or uploaded. Everything happens on this Mac.",
         "help.safety.b3": "A full backup is taken before any change. If a step fails or you cancel, the files are put back as they were, and Restore undoes everything at any time.",
         "help.safety.title": "About safety",
-        "help.step1.body": "Clfont's actual work is done by a script that needs macOS's python3, which ships with the Xcode Command Line Tools. If they are missing, a notice appears at the top of the window — click Install Command Line Tools and follow the system prompt. The full Xcode is not required.\nModifying Claude's app bundle also needs the App Management permission. macOS asks for it the first time you apply; choose Allow. If you previously chose Don't Allow, open System Settings → Privacy & Security → App Management, turn Clfont on, and try again. Clfont does not need Accessibility permission.",
-        "help.step1.title": "First run: command line tools and App Management",
+        "help.step1.body": "Modifying Claude's app bundle needs the App Management permission. macOS asks for it the first time you apply; choose Allow. If you previously chose Don't Allow, open System Settings → Privacy & Security → App Management, turn Clfont on, and try again.\nNothing else is required: Clfont does not depend on the Xcode Command Line Tools, and does not need Accessibility permission.",
+        "help.step1.title": "First run: the App Management permission",
         "help.step2.body": "Applying fonts requires re-signing Claude, which replaces its original signature. To avoid repeatedly modifying the app you use every day, confirm each font choice on the test Claude first. The test Claude is a full copy with its own app identity and its own profile directory, fully isolated from the real one.",
         "help.step2.title": "Try it on the test Claude first",
         "help.step3.body": "Scope decides which text is replaced. Chinese changes Chinese glyphs only and leaves interface icons untouched — this is the recommended choice. English and Both also change how the interface reads; if any icon later looks wrong, switch back to Chinese. Pick your fonts below and the preview updates immediately.",
@@ -248,10 +244,6 @@ final class Copy: ObservableObject {
         "help.step9.title": "Restore and Diagnose",
         "help.title": "How to use Clfont",
         "target.hint": "Check the fonts on the test Claude before applying to the real one.",
-        "toolchain.body": "Clfont's actual work is done by a script that needs macOS's python3, which ships with the Xcode Command Line Tools. Without them nothing can be modified — your Claude is left untouched.",
-        "toolchain.install": "Install Command Line Tools",
-        "toolchain.recheck": "Installed — check again",
-        "toolchain.title": "Xcode Command Line Tools required",
         "stale.action": "Re-apply",
         "stale.body": "Claude's automatic update rewrote the app, so the fonts you applied are gone. Re-applying restores them; your settings are unchanged.",
         "stale.title": "Claude updated — your fonts were overwritten",
@@ -534,12 +526,14 @@ let releaseNotes: [ReleaseNote] = [
     ReleaseNote(
         version: "6.0",
         zh: [
+            "不再需要 Xcode 命令行工具。命令行部分已重写并编入应用包，安装后即可直接使用，无需另行下载任何组件。",
             "新增页面底色调节，可把 Claude 的界面改成米黄等暖色。只在浅色模式下生效，深色模式不受影响。",
             "新增代码块字体与字号的单独设置。",
             "新增界面语言切换，支持简体中文与英文，默认跟随系统。",
             "修复替换英文时，带重音的拉丁字母（é ü ñ 等）不跟随变化的问题。",
         ],
         en: [
+            "The Xcode Command Line Tools are no longer required. The command-line component has been rewritten and is now built into the app — nothing else to download.",
             "Added a page background color, so Claude's interface can be warmed up to cream or any other tint. Light mode only; dark mode is untouched.",
             "Added separate font and size settings for code blocks.",
             "Added an interface language switch — Simplified Chinese and English, following the system by default.",
@@ -603,36 +597,6 @@ let releaseNotes: [ReleaseNote] = [
         ],
         actionZH: nil, actionEN: nil),
 ]
-
-// MARK: - 开发者工具
-
-enum Toolchain {
-    /// clfont 的实际操作由一段 Python 脚本完成，而 `/usr/bin/python3` 是 Xcode
-    /// 命令行工具的转发壳（和 git 一样 118KB）——没装 CLT 时它只会弹系统安装
-    /// 提示，脚本根本起不来。所以这道检查必须在 GUI 层做：CLI 里那道检查等不到
-    /// 执行的机会。（codesign 相反，是系统自带的真二进制，不依赖 CLT。）
-    ///
-    /// 用 `xcode-select -p` 探测，而不是直接跑 python3：前者不会触发安装弹窗，
-    /// 不至于每次启动都打扰用户。
-    static func ready() -> Bool {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/xcode-select")
-        p.arguments = ["-p"]
-        p.standardOutput = FileHandle.nullDevice
-        p.standardError = FileHandle.nullDevice
-        do { try p.run() } catch { return false }
-        p.waitUntilExit()
-        return p.terminationStatus == 0
-    }
-
-    /// 触发系统自带的安装流程（弹 Apple 的安装对话框，不需要下载 Xcode）
-    static func requestInstall() {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/xcode-select")
-        p.arguments = ["--install"]
-        try? p.run()
-    }
-}
 
 // MARK: - CLI 输出标记
 
@@ -775,9 +739,7 @@ final class OutputBox: @unchecked Sendable {
     /// 备份统计按目标缓存：切回来时立刻有内容，不必重新扫盘
     @Published var backupInfo: [Target: (summary: String, prunable: Int)] = [:]
     @Published var backupLoading: Set<Target> = []
-    @Published var toolsReady = true
 
-    func checkTools() { toolsReady = Toolchain.ready() }
 
     var replacesCJK: Bool { scope == "cjk" || scope == "both" }
     var replacesLatin: Bool { scope == "latin" || scope == "both" }
@@ -1322,7 +1284,6 @@ struct ContentView: View {
     @ObservedObject private var copy = Copy.shared
 #if CLFONT_DEBUG
     @State private var showDebug = true
-    @State private var dbgToolsMissing = false
     @State private var dbgBusy = false
     @State private var dbgSearch = ""
 #endif
@@ -1349,14 +1310,6 @@ struct ContentView: View {
         (NSScreen.main?.visibleFrame.height ?? 800) - 32
     }
 
-    /// 界面实际使用的状态；调试版可被面板强制覆盖
-    private var toolsOK: Bool {
-#if CLFONT_DEBUG
-        m.toolsReady && !dbgToolsMissing
-#else
-        m.toolsReady
-#endif
-    }
     private var busyNow: Bool {
 #if CLFONT_DEBUG
         m.busy || dbgBusy
@@ -1399,12 +1352,11 @@ struct ContentView: View {
         }
         .ignoresSafeArea(edges: .top)
         .onAppear {
-            m.checkTools(); m.loadFonts(); m.loadConfig(); m.refreshAll()
+            m.loadFonts(); m.loadConfig(); m.refreshAll()
             updates.checkIfDue()
         }
         .animation(DS.ease24, value: m.target)
         .animation(DS.pop, value: m.scope)
-        .animation(DS.pop, value: m.toolsReady)
         .onChange(of: m.target) { _, t in
             if detailOpen { m.loadBackups(t) }   // 有缓存就直接用，不再扫盘
         }
@@ -1440,22 +1392,6 @@ struct ContentView: View {
         .ignoresSafeArea()
     }
 
-    /// 没有命令行工具时，任何修改都执行不了——直接挡在最前面，并给一键安装入口。
-    private var toolchainNotice: some View {
-        NoticeCard(tint: DS.prod, symbol: "exclamationmark",
-                   title: t("toolchain.title"), message: t("toolchain.body")) {
-            HStack(spacing: 10) {
-                Button(t("toolchain.install")) { Toolchain.requestInstall() }
-                    .buttonStyle(.glassProminent).tint(DS.prod)
-                    .buttonBorderShape(.capsule)
-                Button(t("toolchain.recheck")) { m.checkTools() }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 12)).foregroundStyle(DS.accent)
-            }
-            .padding(.top, 2)
-        }
-    }
-
     /// Claude 的自动更新会重写 app.asar，此前应用的字体随之消失。用户看到的
     /// 只是「字体自己变回去了」，不主动说明的话，多半会以为是本软件出了问题。
     private var staleNotice: some View {
@@ -1464,7 +1400,7 @@ struct ContentView: View {
             Button(t("stale.action")) { m.install() }
                 .buttonStyle(.glassProminent).tint(DS.prod)
                 .buttonBorderShape(.capsule)
-                .disabled(busyNow || !toolsOK)
+                .disabled(busyNow)
                 .padding(.top, 2)
         }
     }
@@ -1518,7 +1454,6 @@ struct ContentView: View {
     private var content: some View {
         VStack(alignment: .leading, spacing: 20) {
             appHeader
-            if !toolsOK { toolchainNotice }
             statusCard
             if m.appMgmtDenied { appMgmtNotice }
             if m.current.loaded && !m.current.missing {
@@ -1939,7 +1874,7 @@ struct ContentView: View {
                 .buttonStyle(.glassProminent).tint(DS.accent)
                 .buttonBorderShape(.capsule)
                 .keyboardShortcut(.defaultAction)
-                .disabled(busyNow || !m.exists(m.target) || !toolsOK)
+                .disabled(busyNow || !m.exists(m.target))
 
                 Button { m.doctor() } label: {
                     Text(t("action.doctor")).font(.system(size: 14))
@@ -1947,7 +1882,7 @@ struct ContentView: View {
                 }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.capsule)
-                .disabled(busyNow || !m.exists(m.target) || !toolsOK)
+                .disabled(busyNow || !m.exists(m.target))
 
                 Button { m.openTarget() } label: {
                     Text(t("action.open")).font(.system(size: 14))
@@ -1955,10 +1890,10 @@ struct ContentView: View {
                 }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.capsule)
-                .disabled(busyNow || !m.exists(m.target) || !toolsOK)
+                .disabled(busyNow || !m.exists(m.target))
 
                 DestructiveButton(title: t("action.restore")) { confirmRestore = true }
-                    .disabled(busyNow || !m.exists(m.target) || !toolsOK)
+                    .disabled(busyNow || !m.exists(m.target))
             }
         }
         .padding(.top, 2)

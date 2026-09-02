@@ -87,12 +87,12 @@ Clfont 的全部操作均在本机完成，具体范围如下：
 | --- | --- |
 | 处理器 | Apple Silicon |
 | 操作系统 | macOS 26 及以上 |
-| 依赖组件 | Xcode 命令行工具（`xcode-select --install`） |
+| 依赖组件 | 无 |
 
-Xcode 命令行工具为必需依赖：命令行工具提供 `python3`，而 Clfont 的全部文件操作
-均由一段 Python 脚本完成。未安装时应用会在窗口顶部给出提示，并提供一键安装入口
-（调用系统自带的安装流程，无需下载完整的 Xcode）；在此之前不会对 Claude 做任何
-修改。
+自 6.0 起不再需要任何额外组件。命令行工具已由 Python 重写为 Swift 并直接编入
+应用包，只调用 `codesign`、`ditto`、`du`、`ps` —— 四者均为系统自带的可执行文件。
+此前必需的 Xcode 命令行工具不再需要：它提供的 `python3` 实为一个 118KB 的转发
+壳，未安装时无法运行。
 
 ## 安装
 
@@ -230,6 +230,10 @@ python3 tests/test_clfont.py test_asar  # 按名字筛选
 UPDATE_GOLDEN=1 python3 tests/test_clfont.py   # 有意改动行为后更新黄金文件
 ```
 
+```bash
+CLFONT_BIN=build/clfont-swift python3 tests/test_clfont.py   # 改测 Swift 实现
+```
+
 约 75 秒，无第三方依赖。测试分两层：纯函数层直接调用 `clfont` 里的函数；端到端
 层对 `tests/fixture.py` 造的假 Claude.app 跑真命令，覆盖安装、还原、幂等、冒烟
 失败回滚、六个崩溃注入点的恢复，以及 GUI 所依赖的状态标记。
@@ -237,11 +241,16 @@ UPDATE_GOLDEN=1 python3 tests/test_clfont.py   # 有意改动行为后更新黄�
 不使用真实的 Claude.app：一次整包备份要 800MB 与约一分钟，且测试一旦改坏它，
 用户日常使用的应用就废了。假 app 只有 64KB，全流程秒级完成。
 
+两个实现的一致性由三条测试保证：相同配置下注入的 CSS 逐字节相同；原样重打包
+asar 与原文件逐字节相同；五个子命令的完整输出在归一化路径、哈希与时间戳后逐字
+相同。最后一条尤为必要——GUI 依据输出中的字面量解析状态，措辞偏差不会导致报错，
+只会让界面长期显示错误的状态。
+
 ## 从源码构建
 
 ```bash
-./gui/build.sh                  # 输出至 build/Clfont.app
-./gui/build.sh /tmp/Clfont.app  # 或指定输出路径
+./gui/build.sh                  # 输出至 build/Clfont.app（含编译 CLI）
+./cli/build.sh                  # 只编译 CLI，输出至 build/clfont-swift
 ```
 
 构建需要 Xcode 提供的 `swiftc` 与 `iconutil`。图形界面使用了 macOS 26 的 Liquid
@@ -267,7 +276,9 @@ clfont --app /path/to/Claude.app install   # 指定其他 Claude 安装位置
 
 | 路径 | 说明 |
 | --- | --- |
-| `clfont` | 命令行工具，单文件 Python 实现，无第三方依赖；全部文件操作在此完成 |
+| `cli/` | 命令行工具，Swift 实现，编入应用包；全部文件操作在此完成 |
+| `clfont` | 同一工具的 Python 实现。**不参与运行**，作为回归测试的对照基准保留 |
+| `tests/` | 回归测试。同一套断言在两个实现上运行，输出须逐字一致 |
 | `gui/ClfontApp.swift` | SwiftUI 图形界面，仅调用命令行工具，不直接操作目标应用 |
 | `gui/render-icon.swift` | 应用图标绘制程序，由构建脚本调用 |
 | `gui/build.sh` | 构建脚本：编译、生成图标、组装 bundle、签名 |

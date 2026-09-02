@@ -5,7 +5,6 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC="$ROOT/gui/ClfontApp.swift"
-CLI="$ROOT/clfont"
 OUT="${1:-$ROOT/build/Clfont.app}"
 
 rm -rf "$OUT"
@@ -15,7 +14,11 @@ swiftc -swift-version 5 -O -parse-as-library \
   -target arm64-apple-macos26.0 \
   -o "$OUT/Contents/MacOS/clfont-gui" "$SRC"
 
-cp "$CLI" "$OUT/Contents/Resources/clfont"
+# CLI 编进 bundle。Swift 版对 Xcode 命令行工具零依赖——它只调用 codesign /
+# ditto / du / ps，四个都是系统自带的真二进制；而 python3 是 CLT 的转发壳，
+# 那正是这次重写要消灭的前置条件。
+swiftc -O -swift-version 5 -target arm64-apple-macos26.0 \
+  -o "$OUT/Contents/Resources/clfont" "$ROOT"/cli/*.swift
 chmod +x "$OUT/Contents/Resources/clfont"
 for sh in setup-test-copy remove-test-copy; do
   cp "$ROOT/gui/$sh.sh" "$OUT/Contents/Resources/$sh.sh"
@@ -45,8 +48,8 @@ cat > "$OUT/Contents/Info.plist" <<'PLIST'
   <key>CFBundleExecutable</key><string>clfont-gui</string>
   <key>CFBundleIconFile</key><string>Clfont</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>5.3</string>
-  <key>CFBundleVersion</key><string>8</string>
+  <key>CFBundleShortVersionString</key><string>6.0</string>
+  <key>CFBundleVersion</key><string>9</string>
   <key>LSMinimumSystemVersion</key><string>26.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
