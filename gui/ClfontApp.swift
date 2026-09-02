@@ -64,7 +64,7 @@ final class Copy: ObservableObject {
         "help.step4.title": "替换范围与字体",
         "help.step4.body": "「中文」只改中文字形，界面图标不受影响，是推荐选项。「英文」和「中英文」会一并改变英文的观感；若之后发现个别图标显示异常，改回「中文」即可。\n选中英文后，下方会多出「英文替换范围」：「仅正文」只改 Claude 的回复与标题，「全部」连界面、输入框和你自己发的消息一起改。界面上的小号标签换成正文衬线体后往往偏细，介意的话选「仅正文」。\n选定后在下方挑字体，预览会立即更新。",
         "help.step5.title": "字号",
-        "help.step5.body": "中文与英文可分别在 80% 到 150% 之间调节，用来弥补宋体这类字体默认显示偏小的问题。\n「界面字号」是单独的一档，管侧边栏、输入框和你自己发的消息。之所以拆开：侧边栏本身只有 13px，跟着正文一起放大时只多一个多像素，看不出来。\n三项都只缩放被替换掉的那些字，行距与整体布局不动——不是把整个页面放大，所以调得过大时文字会显挤。",
+        "help.step5.body": "中文与英文可分别在 80% 到 150% 之间调节，用来弥补宋体这类字体默认显示偏小的问题。\n「侧栏和底栏字号优化」是单独的一档，同时也管输入框和你发出的消息。之所以拆开：这些位置本身只有 12–13px，跟着正文一起放大时只多一个多像素，看不出来。\n三项都只缩放被替换掉的那些字，行距与整体布局不动——不是把整个页面放大，所以调得过大时文字会显挤。",
         "help.step6.title": "代码块",
         "help.step6.body": "可单独指定代码块与行内代码的等宽字体和字号，正文不受影响。默认「保持不变」，此时完全不注入相关规则。",
         "help.step7.title": "页面底色",
@@ -146,11 +146,11 @@ final class Copy: ObservableObject {
         "font.latin": "英文字体",
         "font.latin.size": "英文字号",
         "font.latin.where": "英文替换范围",
-        "font.latin.where.desc": "「仅正文」只改 Claude 的回复与标题；「全部」连界面、输入框和你自己发的消息一起改",
-        "font.latin.body": "仅正文",
+        "font.latin.where.desc": "「仅回复」只改 Claude 的回复与标题；「全部」连界面、输入框和你自己发的消息一起改",
+        "font.latin.body": "仅回复",
         "font.latin.all": "全部",
-        "font.ui.size": "界面字号",
-        "font.ui.desc": "侧边栏、输入框和你自己发的消息。与正文分开，因为侧边栏本身只有 13px，跟着正文一起放大看不出变化",
+        "font.ui.size": "侧栏和底栏字号优化",
+        "font.ui.desc": "侧栏和底栏的字只有 12–13px，跟着正文一起放大只多一个多像素，看不出来，所以单独拆出来调。这一项同时也管输入框和你发出的消息",
         "font.mode": "兼容模式",
         "font.mode.std": "标准",
         "font.mode.ext": "扩展",
@@ -267,7 +267,7 @@ final class Copy: ObservableObject {
         "help.step4.title": "Scope and fonts",
         "help.step4.body": "Chinese swaps Chinese characters only and leaves the interface icons alone, which is why it's the default. If an icon ever looks wrong after using English or Both, switch back to Chinese.\nOnce English is in play, a Where row appears: Body text covers Claude's replies and headings, while Everything also takes the interface, the composer and your own messages. Small interface labels tend to look thin in a body serif, so pick Body text if that bothers you.\nPick your fonts underneath and the preview updates as you go.",
         "help.step5.title": "Size",
-        "help.step5.body": "Chinese and English each scale from 80% to 150%, which helps with fonts like Songti that come out small at their default size.\nInterface size is a separate dial for the sidebar, the composer and your own messages. They are split apart because the sidebar sits at 13px, where scaling with the body adds barely a pixel.\nAll three scale the replaced characters only. Line spacing and layout stay put, so this is not the same as zooming the page — push it too far and the text starts to crowd.",
+        "help.step5.body": "Chinese and English each scale from 80% to 150%, which helps with fonts like Songti that come out small at their default size.\nThe sidebar and bottom bar get their own dial, which also covers the composer and the messages you send. They are split apart because they sit at 12–13px, where scaling with the body adds barely a pixel.\nAll three scale the replaced characters only. Line spacing and layout stay put, so this is not the same as zooming the page — push it too far and the text starts to crowd.",
         "help.step6.title": "Code blocks",
         "help.step6.body": "Code blocks and inline code can take their own monospace font and size, with body text left alone. Leave it unchanged and Clfont writes no code-related rules at all.",
         "help.step7.title": "Page background",
@@ -352,11 +352,11 @@ final class Copy: ObservableObject {
         "font.latin": "English font",
         "font.latin.size": "English size",
         "font.latin.where": "Where",
-        "font.latin.where.desc": "Body text covers Claude's replies and headings. Everything also restyles the interface, the composer and your own messages",
-        "font.latin.body": "Body text",
+        "font.latin.where.desc": "Replies only covers Claude's replies and headings. Everything also restyles the interface, the composer and your own messages",
+        "font.latin.body": "Replies only",
         "font.latin.all": "Everything",
-        "font.ui.size": "Interface size",
-        "font.ui.desc": "The sidebar, the composer and your own messages. Kept separate from body text because the sidebar sits at 13px, where scaling along with the body goes unnoticed",
+        "font.ui.size": "Sidebar and bottom bar",
+        "font.ui.desc": "The sidebar and bottom bar sit at 12–13px, where scaling along with the body adds barely a pixel. This dial handles them separately, and covers the composer and the messages you send too",
         "font.mode": "Compatibility",
         "font.mode.std": "Standard",
         "font.mode.ext": "Extended",
@@ -614,7 +614,7 @@ let releaseNotes: [ReleaseNote] = [
             "界面支持简体中文与英文，默认跟随系统语言。入口在标题栏右侧的地球图标。该设置仅作用于 Clfont 自身，不会改变 Claude。",
             "修复替换英文时带重音的拉丁字母（é ü ñ 等）不跟随变化的问题。此前这些字符会保留原字体，导致欧洲语言正文出现明显混排。",
             "换英文时可选择只改正文，或连界面一起改。界面上的小号标签换成正文衬线体后会显得偏细，此选项用于避免该问题。位于「英文字号」下方，仅在替换英文时出现。",
-            "新增界面字号，可单独放大侧边栏、输入框和自己发送的消息。此前界面与正文共用一个字号，而侧边栏本身仅 13px，跟随正文缩放时几乎看不出变化。",
+            "新增「侧栏和底栏字号优化」，可单独放大侧栏、底栏、输入框与自己发送的消息。此前它们与正文共用一个字号，而这些位置本身仅 12–13px，跟随正文缩放时几乎看不出变化。",
             "重写使用指引，各项设置单独说明。",
         ],
         en: [
@@ -624,7 +624,7 @@ let releaseNotes: [ReleaseNote] = [
             "The interface comes in Simplified Chinese and English, following your system by default. It's behind the globe icon in the title bar — and it only changes Clfont, never Claude.",
             "Fixed accented Latin letters (é, ü, ñ and the rest) keeping their old font when replacing English, which left European text visibly mismatched.",
             "When replacing English you can now limit it to body text, or take the whole interface. Small interface labels look thin in a body serif, and this is the way around that. It sits under English size, and only appears when you're replacing English.",
-            "Added an interface size, so the sidebar, the composer and your own messages can be scaled on their own. They used to share one number with body text, and at 13px the sidebar barely moved.",
+            "Added a separate dial for the sidebar and bottom bar, which also covers the composer and the messages you send. They used to share one number with body text, and at 12–13px they barely moved.",
             "Rewrote the guide, with a section for each setting.",
         ],
         actionZH: nil, actionEN: nil, major: true),
@@ -857,6 +857,9 @@ final class OutputBox: @unchecked Sendable {
 
     var replacesCJK: Bool { scope == "cjk" || scope == "both" }
     var replacesLatin: Bool { scope == "latin" || scope == "both" }
+    /// 「侧栏和底栏字号」只在界面字体族真的被覆盖时才有意义。
+    /// 换中文时它一直生效（侧栏里的聊天标题就是中文）；换英文时只在「全部」下生效。
+    var uiScaleApplies: Bool { replacesCJK || (replacesLatin && latinScope == "all") }
     @Published var statuses: [Target: AppStatus] = [:]
     var current: AppStatus { statuses[target] ?? AppStatus() }
 
@@ -2092,14 +2095,18 @@ struct ContentView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
                 }
 
-                Divider().opacity(0.5)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    scaleRow(t("font.ui.size"), $m.fontScaleUI)
-                    Text(t("font.ui.desc"))
-                        .font(.system(size: 12)).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, 16).padding(.bottom, 10)
+                // 界面字体族被覆盖时这一项才有意义：换中文时它一直生效（侧栏的
+                // 聊天标题就是中文），换英文时只在「全部」下生效。
+                if m.uiScaleApplies {
+                    Divider().opacity(0.5).transition(.opacity)
+                    VStack(alignment: .leading, spacing: 2) {
+                        scaleRow(t("font.ui.size"), $m.fontScaleUI)
+                        Text(t("font.ui.desc"))
+                            .font(.system(size: 12)).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 16).padding(.bottom, 10)
+                    }
+                    .transition(.move(edge: .top).combined(with: .opacity))
                 }
 
                 Divider().opacity(0.5)
