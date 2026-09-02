@@ -104,8 +104,12 @@ class Sandbox:
     def run(self, *args, expect=0, **envkw):
         env = dict(self.env)
         env.update({k: str(v) for k, v in envkw.items()})
+        # CLFONT_BIN 指定要测的实现；不设则测 Python 版。
+        # Swift 重写的验收就是同一套断言在两个二进制上都通过。
+        binary = os.environ.get("CLFONT_BIN")
+        argv = ([binary] if binary else [sys.executable, str(ROOT / "clfont")])
         r = subprocess.run(
-            [sys.executable, str(ROOT / "clfont"), "--app", str(self.app)] + list(args),
+            argv + ["--app", str(self.app)] + list(args),
             capture_output=True, text=True, env=env)
         out = r.stdout + r.stderr
         if expect is not None and r.returncode != expect:
@@ -569,6 +573,63 @@ def test_parity_asar_repack_byte_identical():
         eq(out.read_bytes(), src.read_bytes(), "Swift 版重打包应逐字节一致")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+@test
+def test_parity_command_output_identical():
+    """两版的命令输出必须逐字一致——GUI 靠这些字面量解析状态。
+
+    这是 Swift 重写最容易悄悄跑偏的地方：逻辑写对了，某句提示语少了半句，
+    GUI 就会永远显示错误的状态而没人发现。"""
+    if not swift_available():
+        print("      （跳过：未编译 Swift 版）")
+        return
+    import re
+
+    def normalize(text, sb):
+        t = text.replace(str(sb.dir), "SANDBOX")
+        # 顺序要紧：日志文件名里的 20260902-230457 也匹配 [0-9a-f]{8,64}，
+        # 先归一化它，否则日期被吃成 HASH、时间部分留下来，两版就永远不同。
+        t = re.sub(r"clfont-\d{8}-\d{6}-", "clfont-STAMP-", t)
+        t = re.sub(r"-[0-9a-f]{8}\.app", "-SLUG.app", t)
+        t = re.sub(r"[0-9a-f]{8,64}", "HASH", t)
+        t = re.sub(r"\d{2}:\d{2}:\d{2}", "TIME", t)
+        t = re.sub(r"[\d.]+ ?GB", "NGB", t)
+        return t
+
+    for cmds in (["status"], ["doctor"], ["backups"],
+                 ["install", "--yes", "--scope", "both", "--scale", "120",
+                  "--mono", "Menlo", "--bg", "#F0EEE6"],
+                 ["uninstall", "--yes"]):
+        outs = []
+        for binary in (None, str(SWIFT_BIN)):
+            sb = Sandbox()
+            try:
+                env = dict(os.environ)
+                if binary: env["CLFONT_BIN"] = binary
+                else: env.pop("CLFONT_BIN", None)
+                # 装一次，好让 status/doctor/backups 有内容可报
+                if cmds[0] in ("status", "doctor", "backups", "uninstall"):
+                    old = os.environ.get("CLFONT_BIN")
+                    if binary: os.environ["CLFONT_BIN"] = binary
+                    else: os.environ.pop("CLFONT_BIN", None)
+                    sb.run("install", "--yes", "--scope", "cjk")
+                    if old is None: os.environ.pop("CLFONT_BIN", None)
+                    else: os.environ["CLFONT_BIN"] = old
+                argv = ([binary] if binary
+                        else [sys.executable, str(ROOT / "clfont")])
+                r = subprocess.run(argv + ["--app", str(sb.app)] + cmds,
+                                   capture_output=True, text=True, env=sb.env if not binary
+                                   else dict(sb.env, CLFONT_BIN=binary))
+                outs.append(normalize(r.stdout + r.stderr, sb))
+            finally:
+                sb.cleanup()
+        if outs[0] != outs[1]:
+            import difflib
+            d = "\n".join(list(difflib.unified_diff(
+                outs[0].splitlines(), outs[1].splitlines(),
+                "python", "swift", lineterm=""))[:20])
+            raise AssertionError(f"命令 {cmds} 两版输出不一致：\n{d}")
 
 
 # ---------------------------------------------------------------- 入口

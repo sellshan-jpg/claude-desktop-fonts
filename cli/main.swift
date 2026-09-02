@@ -13,6 +13,7 @@ struct Args {
     func str(_ k: String) -> String? { flags[k] }
 }
 
+let boolFlags: Set<String> = ["--prune", "--purge", "--all"]
 let takesValue: Set<String> = ["--app", "--scope", "--mode", "--scale",
                                "--scale-latin", "--mono", "--mono-scale", "--bg",
                                "--in", "--out"]
@@ -75,8 +76,23 @@ case "_repack":
         }
     } catch { die("重打包失败：\(error)") }
 
+case "install":
+    Log.open("install")
+    cmdInstall(target, args)
+case "uninstall":
+    Log.open("uninstall")
+    cmdUninstall(target, args)
+case "status":
+    Log.open("status")
+    cmdStatus(target)
+case "doctor":
+    Log.open("doctor")
+    cmdDoctor(target)
+case "backups":
+    Log.open("backups")
+    cmdBackups(target, args)
 case "":
     die("缺少子命令", 2)
 default:
-    die("暂未实现的子命令：\(args.cmd)", 2)
+    die("未知子命令：\(args.cmd)", 2)
 }
