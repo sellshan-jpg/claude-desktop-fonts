@@ -53,6 +53,10 @@ final class Copy: ObservableObject {
         "toolchain.recheck": "我已安装，重新检测",
         "toolchain.title": "需要先安装 Xcode 命令行工具",
         "stale.action": "重新应用",
+        "appmgmt.body": "修改 Claude 的应用包需要「App 管理」权限。系统会在第一次执行时弹出请求，若此前选择了「不允许」，请点击下方按钮前往设置，为 Clfont 打开开关后重新执行。",
+        "appmgmt.open": "打开「App 管理」设置",
+        "appmgmt.recheck": "我已打开，重新检测",
+        "appmgmt.title": "无法修改 Claude：缺少「App 管理」权限",
         "update.auto": "启动时自动检查更新",
         "update.body": "下载后替换「应用程序」中的 Clfont 即可，字体设置会保留。若此前已为 Claude 应用过字体，更新后请重新执行一次「应用」。",
         "update.download": "前往下载",
@@ -194,6 +198,14 @@ struct ReleaseNote: Identifiable {
 }
 
 let releaseNotes: [ReleaseNote] = [
+    ReleaseNote(
+        version: "5.3",
+        changes: [
+            "新增字号调节。中文与英文可分别设置 80% 至 150%，用于弥补宋体等字体默认显示偏小的问题。该设置只作用于被替换的文字，界面图标、行距与整体布局均不受影响。",
+            "缺少「App 管理」权限导致修改被系统拦下时，界面会给出说明，并提供直接前往对应设置面板的入口。",
+            "执行修改前先行确认该权限，不再等到备份完成后才失败。",
+        ],
+        action: nil),
     ReleaseNote(
         version: "5.2",
         changes: [
@@ -356,6 +368,14 @@ final class OutputBox: @unchecked Sendable {
     @Published var fontLatin = ""
     @Published var scope = "cjk"          // cjk | latin | both
     @Published var mode = "auto"
+    /// 字号百分比。走 @font-face 的 size-adjust，只缩放被替换掉的那些字符，
+    /// 不动 CSS 的 font-size，因此图标与整体布局都不受影响。
+    @Published var fontScale = 100.0
+    @Published var fontScaleLatin = 100.0
+    /// 上一次修改操作是否因缺少「App 管理」权限被系统拦下。
+    /// 不做启动时的主动探测——那需要真的去写一次 Claude，会在用户还没提出
+    /// 任何要求时就弹出系统授权请求。等到操作真的失败再提示，时机才对。
+    @Published var appMgmtDenied = false
     @Published var fonts: [FontChoice] = []
     @Published var latinFonts: [FontChoice] = []
 
@@ -433,6 +453,8 @@ final class OutputBox: @unchecked Sendable {
         fontLatin = j["font_latin"] as? String ?? fontLatin
         scope = j["scope"] as? String ?? scope
         mode = j["mode"] as? String ?? mode
+        fontScale = (j["font_scale"] as? NSNumber)?.doubleValue ?? fontScale
+        fontScaleLatin = (j["font_scale_latin"] as? NSNumber)?.doubleValue ?? fontScaleLatin
     }
 
     func saveConfig() {
@@ -445,6 +467,8 @@ final class OutputBox: @unchecked Sendable {
         j["font_latin"] = fontLatin
         j["scope"] = scope
         j["mode"] = mode
+        j["font_scale"] = Int(fontScale.rounded())
+        j["font_scale_latin"] = Int(fontScaleLatin.rounded())
         if let r = c?.regular { j["font_regular"] = r } else { j.removeValue(forKey: "font_regular") }
         if let b = c?.bold { j["font_bold"] = b } else { j.removeValue(forKey: "font_bold") }
         if let r = l?.regular { j["font_latin_regular"] = r } else { j.removeValue(forKey: "font_latin_regular") }
@@ -611,22 +635,40 @@ final class OutputBox: @unchecked Sendable {
     func install() {
         saveConfig()
         let t = target
-        exec(["install", "-y", "--scope", scope, "--mode", mode], on: t,
+        exec(["install", "-y", "--scope", scope, "--mode", mode,
+              "--scale", String(Int(fontScale.rounded())),
+              "--scale-latin", String(Int(fontScaleLatin.rounded()))], on: t,
              label: "安装到「\(t.label)」：备份 → 重打包 → 重签名 → 启动测试（约 1–2 分钟）") {
-            [weak self] _, _ in self?.refresh(t)
+            [weak self] _, out in
+            self?.noteAppMgmt(out)
+            self?.refresh(t)
         }
     }
 
     func uninstall() {
         let t = target
         exec(["uninstall", "-y"], on: t, label: "还原「\(t.label)」：恢复原文件 → 重签名") {
-            [weak self] _, _ in self?.refresh(t)
+            [weak self] _, out in
+            self?.noteAppMgmt(out)
+            self?.refresh(t)
         }
     }
 
     func doctor() {
         let t = target
-        exec(["doctor"], on: t, label: "自检「\(t.label)」") { [weak self] _, _ in self?.refresh(t) }
+        exec(["doctor"], on: t, label: "自检「\(t.label)」") { [weak self] _, out in
+            self?.noteAppMgmt(out)
+            self?.refresh(t)
+        }
+    }
+
+    /// 两处标记：install/uninstall 被拦下时的「需要「App 管理」权限」，以及
+    /// doctor 的「无法写入」。注意 doctor 通过时也会打印「App 管理」四个字，
+    /// 所以不能只匹配这四个字。措辞改动需与 CLI 同步。
+    private func noteAppMgmt(_ out: String) {
+        let denied = out.contains("需要「App 管理」权限")
+            || out.contains("「App 管理」权限：无法写入")
+        withAnimation(DS.ease) { appMgmtDenied = denied }
     }
 
     /// 重建测试副本：从正式版复制一份，换独立身份、去掉 claude:// 注册，
@@ -1047,6 +1089,27 @@ struct ContentView: View {
                    title: t("helper.title"), message: t("helper.body")) { EmptyView() }
     }
 
+    /// 缺少「App 管理」权限时，任何修改都会被系统拦下。只在操作真的失败后
+    /// 出现，并直接给出跳转到对应设置面板的入口。
+    private var appMgmtNotice: some View {
+        NoticeCard(tint: DS.danger, symbol: "lock",
+                   title: t("appmgmt.title"), message: t("appmgmt.body")) {
+            HStack(spacing: 10) {
+                Button(t("appmgmt.open")) {
+                    NSWorkspace.shared.open(URL(string:
+                        "x-apple.systempreferences:com.apple.preference.security?Privacy_AppBundles")!)
+                }
+                .buttonStyle(.glassProminent).tint(DS.danger)
+                .buttonBorderShape(.capsule)
+                Button(t("appmgmt.recheck")) { m.doctor() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12)).foregroundStyle(DS.accent)
+                    .disabled(busyNow)
+            }
+            .padding(.top, 2)
+        }
+    }
+
     /// 启动时后台查到的新版本。只在确实有更新时出现，「以后再说」之后同一版本
     /// 不再打扰；查不到、网络不通都不显示任何东西。
     private func updateNotice(_ r: Updater.Release) -> some View {
@@ -1069,6 +1132,7 @@ struct ContentView: View {
             appHeader
             if !toolsOK { toolchainNotice }
             statusCard
+            if m.appMgmtDenied { appMgmtNotice }
             if m.current.loaded && !m.current.missing {
                 if m.current.stale { staleNotice }
                 if !m.current.helperOK { helperNotice }
@@ -1330,6 +1394,32 @@ struct ContentView: View {
 
     // MARK: 字体
 
+    /// 字号行。用 size-adjust 实现，所以调的是「被替换的那些字符显示多大」，
+    /// 不是整页缩放——图标、间距、未替换的文字都不动。
+    private func scaleRow(_ title: String, _ value: Binding<Double>) -> some View {
+        HStack(spacing: 14) {
+            Text(title).font(.system(size: 14))
+            Spacer()
+            Slider(value: value, in: 80...150, step: 5)
+                .frame(width: 190)
+            Text("\(Int(value.wrappedValue))%")
+                .font(.system(size: 12.5, design: .monospaced))
+                .foregroundStyle(value.wrappedValue == 100 ? .secondary : .primary)
+                .frame(width: 42, alignment: .trailing)
+                .monospacedDigit()
+            Button {
+                withAnimation(DS.ease) { value.wrappedValue = 100 }
+            } label: {
+                Image(systemName: "arrow.counterclockwise")
+                    .font(.system(size: 10, weight: .semibold))
+            }
+            .buttonStyle(.plain).foregroundStyle(.secondary)
+            .disabled(value.wrappedValue == 100)
+            .help("恢复 100%")
+        }
+        .padding(.horizontal, 16).padding(.vertical, 11)
+    }
+
     private var fontGroup: some View {
         VStack(alignment: .leading, spacing: 7) {
             GroupLabel(text: "字体")
@@ -1359,6 +1449,10 @@ struct ContentView: View {
                     }
                     .padding(.horizontal, 16).padding(.vertical, 11)
                     .transition(.move(edge: .top).combined(with: .opacity))
+
+                    Divider().opacity(0.5).transition(.opacity)
+                    scaleRow("中文字号", $m.fontScale)
+                        .transition(.move(edge: .top).combined(with: .opacity))
                 }
 
                 if m.replacesLatin {
@@ -1371,6 +1465,10 @@ struct ContentView: View {
                     }
                     .padding(.horizontal, 16).padding(.vertical, 11)
                     .transition(.move(edge: .top).combined(with: .opacity))
+
+                    Divider().opacity(0.5).transition(.opacity)
+                    scaleRow("英文字号", $m.fontScaleLatin)
+                        .transition(.move(edge: .top).combined(with: .opacity))
                 }
 
                 Divider().opacity(0.5)
@@ -1406,11 +1504,15 @@ struct ContentView: View {
     /// 预览按分组分别用各自的字体渲染，没被替换的那部分保持系统字体，
     /// 所见即所得。
     private var previewLine: some View {
+        // 预览里也按字号缩放，这样拖滑块能立刻看出效果
+        let cjkSize = 20 * m.fontScale / 100
+        let latinSize = 20 * m.fontScaleLatin / 100
         let cjk = Text(t("font.preview.cjk"))
-            .font(m.replacesCJK ? .custom(m.fontFamily, size: 20) : .system(size: 20))
+            .font(m.replacesCJK ? .custom(m.fontFamily, size: cjkSize)
+                                : .system(size: 20))
         let latin = Text("  ABCDE abcde 1234567890")
             .font(m.replacesLatin && !m.fontLatin.isEmpty
-                  ? .custom(m.fontLatin, size: 20) : .system(size: 20))
+                  ? .custom(m.fontLatin, size: latinSize) : .system(size: 20))
         return Text("\(cjk)\(latin)")
     }
 

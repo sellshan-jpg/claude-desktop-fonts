@@ -115,6 +115,8 @@ DEFAULT_CONFIG = {
     "font_latin": "",         # 英文字体（scope 含 latin 时必填）
     "fallback_fonts": ["STSong", "Songti TC"],
     "mode": "auto",           # auto | brute
+    "font_scale": 100,        # 中文字号，百分比（见 _scale）
+    "font_scale_latin": 100,  # 英文字号，百分比
 }
 
 
@@ -596,28 +598,52 @@ def _srcs(cfg, key="font"):
     return _locs([reg] + fonts), _locs([bold or reg] + fonts)
 
 
+SCALE_MIN, SCALE_MAX = 80, 150
+
+
+def _scale(cfg, key):
+    """字号缩放的百分比，落在 [80, 150]。
+
+    实现用的是 @font-face 的 size-adjust，它只放大/缩小字形本身，不改任何
+    CSS 里的 font-size 值。所以缩放严格限制在被我们替换掉的那些码位上——
+    图标、没被替换的文字、整体布局的间距都不受牵连。这是它比「整页缩放」
+    或 `*{font-size:...}` 干净得多的地方。"""
+    try:
+        v = int(round(float(cfg.get(key, 100))))
+    except (TypeError, ValueError):
+        v = 100
+    return max(SCALE_MIN, min(SCALE_MAX, v))
+
+
+def size_adjust_css(scale):
+    return f"size-adjust:{scale}%;" if scale != 100 else ""
+
+
 def scope_specs(cfg):
-    """按 scope 展开成 [(码位区间, 常规 src, 粗体 src)]。字体没填的分组跳过。"""
+    """按 scope 展开成 [(码位区间, 常规 src, 粗体 src, 字号百分比)]。
+    字体没填的分组跳过。"""
     scope = cfg.get("scope", "cjk")
     out = []
     if scope in ("cjk", "both"):
         reg, bold = _srcs(cfg, "font")
         if reg:
-            out.append((UNICODE_RANGE_CJK, reg, bold))
+            out.append((UNICODE_RANGE_CJK, reg, bold, _scale(cfg, "font_scale")))
     if scope in ("latin", "both"):
         reg, bold = _srcs(cfg, "font_latin")
         if reg:
-            out.append((UNICODE_RANGE_LATIN, reg, bold))
+            out.append((UNICODE_RANGE_LATIN, reg, bold,
+                        _scale(cfg, "font_scale_latin")))
     return out
 
 
 def font_face_css(cfg):
     reg_src, bold_src = _srcs(cfg)
+    adj = size_adjust_css(_scale(cfg, "font_scale"))
     return (
         f'@font-face{{font-family:"ClaudeCJKSerif";font-weight:normal;'
-        f'src:{reg_src};unicode-range:{UNICODE_RANGE};}}'
+        f'src:{reg_src};unicode-range:{UNICODE_RANGE};{adj}}}'
         f'@font-face{{font-family:"ClaudeCJKSerif";font-weight:bold;'
-        f'src:{bold_src};unicode-range:{UNICODE_RANGE};}}'
+        f'src:{bold_src};unicode-range:{UNICODE_RANGE};{adj}}}'
     )
 
 
@@ -643,16 +669,17 @@ def face_override_css(cfg, families=PAGE_FONT_FAMILIES):
     渲染。好处是**完全不改任何 font-family**——侧边栏那些图标其实就是
     anthropic-sans 里的字形，一旦覆盖 font-family 就会变成豆腐块。"""
     out = []
-    for rng, reg_src, bold_src in scope_specs(cfg):
+    for rng, reg_src, bold_src, scale in scope_specs(cfg):
+        adj = size_adjust_css(scale)
         for fam in families:
             for style in ("normal", "italic"):
                 # 页面自己的 face 声明的是可变字重 300 800，这里按常规/粗体拆
                 # 两段，免得粗体落回原字体（那样又会走系统兜底）。
                 out.append(f'@font-face{{font-family:"{fam}";src:{reg_src};'
-                           f'unicode-range:{rng};'
+                           f'unicode-range:{rng};{adj}'
                            f'font-weight:100 500;font-style:{style};}}')
                 out.append(f'@font-face{{font-family:"{fam}";src:{bold_src};'
-                           f'unicode-range:{rng};'
+                           f'unicode-range:{rng};{adj}'
                            f'font-weight:501 900;font-style:{style};}}')
     return "".join(out)
 
@@ -822,6 +849,43 @@ def codesign_available():
         return True, exe
     first = (out.strip().splitlines() or [""])[0]
     return False, first or f"codesign 退出码 {r.returncode}"
+
+
+APP_MGMT_HINT = (
+    "需要「App 管理」权限才能修改 Claude。\n"
+    "    请打开「系统设置 → 隐私与安全性 → App 管理」，为 Clfont 打开开关，"
+    "然后重新执行。\n"
+    "    （从终端运行时，需要为「终端」打开该开关。）")
+
+
+def app_write_permitted():
+    """探测能否写目标 app —— macOS 的「App 管理」权限（TCC）。
+
+    第一次尝试修改别的 app 时系统会弹窗询问，选了「不允许」之后就只剩 EPERM。
+    与其等备份跑完一分钟、改到一半才失败，不如一开始就用一次无害的写操作探路。
+
+    探测方式是把 Info.plist 的时间戳原样写回：这是一次真正的修改操作，会经过
+    同一道 TCC 检查，但文件内容与元数据都不变，代码签名也不受影响（签名封的是
+    内容，不是 mtime）。
+
+    这只是提前量，不是唯一防线——万一某天 utimes 不再触发这道检查，探测会
+    误判为通过，随后真正的写操作仍会拿到 EPERM，那里同样会给出这段提示。"""
+    try:
+        st = INFO_PLIST.stat()
+        os.utime(INFO_PLIST, (st.st_atime, st.st_mtime))
+        return True, ""
+    except PermissionError as e:
+        return False, str(e)
+    except OSError as e:
+        return False, str(e)
+
+
+def require_app_write():
+    good, detail = app_write_permitted()
+    if good:
+        return
+    die(f"{APP_MGMT_HINT}\n    （系统返回：{detail}）\n"
+        "    此刻尚未对 Claude 做任何修改。")
 
 
 def require_codesign():
@@ -1316,11 +1380,16 @@ def cmd_install(args):
         cfg["scope"] = args.scope
     if cfg.get("scope") not in ("cjk", "latin", "both"):
         cfg["scope"] = "cjk"
+    if getattr(args, "scale", None) is not None:
+        cfg["font_scale"] = args.scale
+    if getattr(args, "scale_latin", None) is not None:
+        cfg["font_scale_latin"] = args.scale_latin
     if not scope_specs(cfg):
         die("没有可用的字体设置：scope=%s，但对应的字体名为空。" % cfg["scope"])
 
     step("准备")
     require_codesign()
+    require_app_write()
     ensure_self_installed()
     version = claude_version()
     if version is None:
@@ -1416,6 +1485,9 @@ def cmd_install(args):
             raise
         name = "用户中断" if isinstance(e, KeyboardInterrupt) else f"异常：{e}"
         print(f"\n✗ install 失败（{name}）")
+        # 前面的探测只是提前量，真正的写操作仍可能撞上 TCC；这里补同一段指引
+        if isinstance(e, PermissionError):
+            print("  " + APP_MGMT_HINT.replace("\n    ", "\n  "))
         L.raw(f"install failed: {e!r}")
         txn.rollback()
         sys.exit(130 if isinstance(e, KeyboardInterrupt) else 1)
@@ -1433,6 +1505,7 @@ def cmd_uninstall(args):
     if claude_version() is None:
         die(f"未找到 {APP}")
     require_codesign()
+    require_app_write()
     check_prev_txn()
     if not quit_claude(args.yes):
         die("Claude 仍在运行", 2)
@@ -1520,8 +1593,9 @@ def cmd_status(_args):
     backups = list_backups()
     info("整包备份：" + ("、".join(b.name for b in backups) if backups else "无"))
     info(f"工具固定位置：{CANON}{'（已安装）' if CANON.exists() else '（未安装，install 时会自动复制）'}")
-    info(f"配置：范围 {cfg.get('scope', 'cjk')}，中文字体 {cfg['font'] or '—'}，"
-         f"英文字体 {cfg.get('font_latin') or '—'}，模式 {cfg.get('mode', 'auto')}")
+    info(f"配置：范围 {cfg.get('scope', 'cjk')}，中文字体 {cfg['font'] or '—'}"
+         f"（{_scale(cfg, 'font_scale')}%），英文字体 {cfg.get('font_latin') or '—'}"
+         f"（{_scale(cfg, 'font_scale_latin')}%），模式 {cfg.get('mode', 'auto')}")
 
 
 def cmd_doctor(_args):
@@ -1567,6 +1641,15 @@ def cmd_doctor(_args):
     else:
         bad(f"磁盘剩余仅 {free:.1f}GB，可能不够备份")
         problems += 1
+    good, detail = app_write_permitted()
+    if good:
+        ok("「App 管理」权限：可写入目标 app")
+    else:
+        bad(f"「App 管理」权限：无法写入 {APP}（{detail}）")
+        info("请到「系统设置 → 隐私与安全性 → App 管理」为 Clfont"
+             "（或从终端运行时的「终端」）打开开关")
+        problems += 1
+
     good, detail = codesign_available()
     if good:
         ok(f"codesign 可用：{detail}")
@@ -1656,6 +1739,10 @@ def main():
     p_install.add_argument("--mode", choices=["auto", "brute"],
                            help="auto=改 CDS 字体变量（默认，拉丁不受影响）；"
                                 "brute=额外加全局兜底规则（变量名不匹配时用）")
+    p_install.add_argument("--scale", type=int, metavar="N",
+                           help=f"中文字号百分比（{SCALE_MIN}–{SCALE_MAX}，默认 100）")
+    p_install.add_argument("--scale-latin", type=int, metavar="N",
+                           help=f"英文字号百分比（{SCALE_MIN}–{SCALE_MAX}，默认 100）")
     p_install.add_argument("-y", "--yes", action="store_true",
                            help="所有确认自动回答 yes")
 
