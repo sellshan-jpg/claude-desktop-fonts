@@ -158,6 +158,7 @@ final class Copy: ObservableObject {
         "code.size": "代码字号",
         "code.desc": "只影响代码块与行内代码，正文不受影响",
         "code.keep": "保持不变",
+        "code.preview": "ABCDE VWXYZ abcde vwxyz 1234567890",
 
         // —— 外观
         "look.group": "外观",
@@ -165,6 +166,9 @@ final class Copy: ObservableObject {
         "look.bg.desc": "把 Claude 的界面底色换成早期版本的米色。仅在浅色模式生效。",
         "look.bg.off": "不修改",
         "look.bg.custom": "自定",
+        "look.bg.classic": "经典",
+        "look.bg.light": "浅米",
+        "look.bg.grey": "米灰",
         "header.lang": "Clfont 的界面语言",
 
         // —— 按钮
@@ -232,6 +236,7 @@ final class Copy: ObservableObject {
         "about.lang.auto": "跟随系统",
         "release.version": "版本 {v}",
         "release.current": "当前版本",
+        "release.major": "大版本更新",
 
         // —— 教程里的操作行
     ]
@@ -352,12 +357,16 @@ final class Copy: ObservableObject {
         "code.size": "Code size",
         "code.desc": "Code blocks and inline code only. Body text stays as it is",
         "code.keep": "Leave unchanged",
+        "code.preview": "ABCDE VWXYZ abcde vwxyz 1234567890",
 
         "look.group": "Appearance",
         "look.bg": "Page background",
         "look.bg.desc": "Brings back the cream background of earlier Claude versions. Light mode only.",
         "look.bg.off": "Unchanged",
         "look.bg.custom": "Custom",
+        "look.bg.classic": "Classic",
+        "look.bg.light": "Light",
+        "look.bg.grey": "Greige",
         "header.lang": "Clfont's own interface language",
 
         "action.apply": "Apply to {target}",
@@ -419,6 +428,7 @@ final class Copy: ObservableObject {
         "about.lang.auto": "System",
         "release.version": "Version {v}",
         "release.current": "Current",
+        "release.major": "MAJOR RELEASE",
 
     ]
 
@@ -574,6 +584,8 @@ struct ReleaseNote: Identifiable {
     /// 需要用户配合的动作；没有就留 nil
     let actionZH: String?
     let actionEN: String?
+    /// 大版本：值得让人停下来看一眼的那种更新
+    var major = false
     var id: String { version }
 
     var changes: [String] { Copy.shared.effective == .en ? en : zh }
@@ -584,12 +596,12 @@ let releaseNotes: [ReleaseNote] = [
     ReleaseNote(
         version: "6.0",
         zh: [
-            "不再需要 Xcode 命令行工具。此前必须先装它才能使用，这道门槛已经拿掉：命令行部分重写后直接编进了应用，装好即可用。",
-            "新增页面底色，可把 Claude 的界面换回早期版本的米色。三档预设，也能自己取色。仅在浅色模式生效，深色模式不受影响。在主界面的「外观」里。",
-            "代码块与行内代码现在可以单独指定等宽字体和字号，正文不受影响。在主界面的「代码块」里。",
-            "界面可切换简体中文与英文，默认跟随系统。在标题栏右侧的地球图标里——这项只影响 Clfont 自己，不会改变 Claude。",
-            "修复替换英文时，带重音的拉丁字母（é ü ñ 等）不跟着变的问题。此前它们会保持原字体，欧洲语言正文会出现明显混排。",
-            "重写了使用指引，五项设置各自单独说明。",
+            "不再依赖 Xcode 命令行工具。此前必须先行安装方可使用，该前置条件已经移除：命令行部分经重写后直接编入应用包，安装即可使用。",
+            "新增页面底色设置，可将 Claude 的界面底色恢复为早期版本的米色。提供三档预设，亦可自行取色。仅在浅色模式生效，深色模式不受影响。位于主界面「外观」一栏。",
+            "代码块与行内代码现可单独指定等宽字体与字号，正文不受影响。位于主界面「代码块」一栏。",
+            "界面支持简体中文与英文，默认跟随系统语言。入口在标题栏右侧的地球图标。该设置仅作用于 Clfont 自身，不会改变 Claude。",
+            "修复替换英文时带重音的拉丁字母（é ü ñ 等）不跟随变化的问题。此前这些字符会保留原字体，导致欧洲语言正文出现明显混排。",
+            "重写使用指引，五项设置各自单独说明。",
         ],
         en: [
             "The Xcode Command Line Tools are no longer required. They used to be a prerequisite; that hurdle is gone. The command-line half was rewritten and now ships inside the app.",
@@ -599,7 +611,7 @@ let releaseNotes: [ReleaseNote] = [
             "Fixed accented Latin letters (é, ü, ñ and the rest) keeping their old font when replacing English, which left European text visibly mismatched.",
             "Rewrote the guide, with a section for each of the five settings.",
         ],
-        actionZH: nil, actionEN: nil),
+        actionZH: nil, actionEN: nil, major: true),
     ReleaseNote(
         version: "5.3",
         zh: [
@@ -1888,6 +1900,21 @@ struct ContentView: View {
                     Divider().opacity(0.5).transition(.opacity)
                     scaleRow(t("code.size"), $m.fontMonoScale)
                         .transition(.move(edge: .top).combined(with: .opacity))
+
+                    Divider().opacity(0.5).transition(.opacity)
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(t("font.preview.label"))
+                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                        // 等宽字体要看的是「对不对齐」和「0/O、1/l 分不分得清」，
+                        // 所以取字母表首尾各五个加全部数字，而不是一句话。
+                        Text(t("code.preview"))
+                            .font(.custom(m.fontMono, size: 15 * m.fontMonoScale / 100))
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 13)
+                    .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
             .glassEffect(.regular, in: DS.card)
@@ -1896,8 +1923,13 @@ struct ContentView: View {
 
     /// 底色预设。#F0EEE6 是照旧版 Claude 的暖米色取的；另两个更淡，
     /// 给觉得米黄太重的人。空字符串 = 不改。
+    /// 底色预设。#F0EEE6 是照旧版 Claude 的暖米色取的，所以叫「经典」；
+    /// 另两档更淡，给觉得米黄太重的人。
     private static let bgPresets: [(String, String)] = [
-        ("", "look.bg.off"), ("#F0EEE6", ""), ("#F7F4EC", ""), ("#F2F1EC", ""),
+        ("", "look.bg.off"),
+        ("#F0EEE6", "look.bg.classic"),
+        ("#F7F4EC", "look.bg.light"),
+        ("#F2F1EC", "look.bg.grey"),
     ]
 
     private var lookGroup: some View {
@@ -1914,7 +1946,7 @@ struct ContentView: View {
                     Spacer(minLength: 12)
                     HStack(spacing: 8) {
                         ForEach(Self.bgPresets, id: \.0) { hex, key in
-                            bgSwatch(hex, label: key.isEmpty ? nil : t(key))
+                            bgSwatch(hex, label: t(key))
                         }
                         ColorPicker("", selection: Binding(
                             get: { Color(hex: UInt32(m.bgColor.dropFirst(), radix: 16) ?? 0xF0EEE6) },
@@ -1930,11 +1962,12 @@ struct ContentView: View {
         }
     }
 
-    private func bgSwatch(_ hex: String, label: String?) -> some View {
+    private func bgSwatch(_ hex: String, label: String) -> some View {
         let selected = m.bgColor.uppercased() == hex.uppercased()
         return Button {
             withAnimation(DS.ease) { m.bgColor = hex }
         } label: {
+            VStack(spacing: 4) {
             ZStack {
                 if hex.isEmpty {
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
@@ -1952,10 +1985,14 @@ struct ContentView: View {
                         .strokeBorder(DS.accent, lineWidth: 2)
                 }
             }
-            .frame(width: 30, height: 26)
+            .frame(width: 34, height: 24)
+                Text(label)
+                    .font(.system(size: 10))
+                    .foregroundStyle(selected ? DS.accent : .secondary)
+            }
         }
         .buttonStyle(.plain)
-        .help(label ?? hex)
+        .help(hex.isEmpty ? label : "\(label)  \(hex)")
     }
 
     private var fontGroup: some View {
