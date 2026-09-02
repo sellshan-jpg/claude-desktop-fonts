@@ -33,6 +33,8 @@ let CDS_SERIF = "\"anthropic-serif\", ui-serif, Georgia, \"Times New Roman\", se
 let CDS_SANS = "\"anthropic-sans\", ui-sans-serif, -apple-system, BlinkMacSystemFont, "
              + "\"Segoe UI\", sans-serif"
 
+let CJK_FAMILY_BODY = "ClaudeCJKSerif"
+let CJK_FAMILY_UI = "ClaudeCJKSerifUI"
 let CLFONT_MONO_FAMILY = "ClfontMono"
 
 // 远程 claude.ai 页面用的是 CDS 的 .cds-root 作用域版本，变量名带 --cds- 前缀
@@ -110,20 +112,26 @@ func scopeSpecs(_ cfg: Config) -> [ScopeSpec] {
     return out
 }
 
+/// 中文替换用的族。正文与界面各定义一份，除字号外完全相同——
+/// 这样侧边栏、输入框的中文可以和正文用不同字号。
 func fontFaceCSS(_ cfg: Config) -> String {
     let (reg, bold) = srcs(cfg)
-    let adj = sizeAdjustCSS(scaleOf(cfg, "font_scale"))
-    return "@font-face{font-family:\"ClaudeCJKSerif\";font-weight:normal;"
-         + "src:\(reg);unicode-range:\(UNICODE_RANGE);\(adj)}"
-         + "@font-face{font-family:\"ClaudeCJKSerif\";font-weight:bold;"
-         + "src:\(bold);unicode-range:\(UNICODE_RANGE);\(adj)}"
+    var out = ""
+    for (fam, key) in [(CJK_FAMILY_BODY, "font_scale"), (CJK_FAMILY_UI, "font_scale_ui")] {
+        let adj = sizeAdjustCSS(scaleOf(cfg, key))
+        out += "@font-face{font-family:\"\(fam)\";font-weight:normal;"
+             + "src:\(reg);unicode-range:\(UNICODE_RANGE);\(adj)}"
+             + "@font-face{font-family:\"\(fam)\";font-weight:bold;"
+             + "src:\(bold);unicode-range:\(UNICODE_RANGE);\(adj)}"
+    }
+    return out
 }
 
 /// 把 ClaudeCJKSerif 前插到 CDS 字体变量——拉丁不受影响（unicode-range）。
 func varsCSS() -> String {
     ":root{"
-    + "--font-anthropic-serif:\"ClaudeCJKSerif\", \(CDS_SERIF) !important;"
-    + "--font-anthropic-sans:\"ClaudeCJKSerif\", \(CDS_SANS) !important;"
+    + "--font-anthropic-serif:\"\(CJK_FAMILY_BODY)\", \(CDS_SERIF) !important;"
+    + "--font-anthropic-sans:\"\(CJK_FAMILY_UI)\", \(CDS_SANS) !important;"
     + "}"
 }
 
@@ -134,9 +142,12 @@ func varsCSS() -> String {
 func faceOverrideCSS(_ cfg: Config, _ families: [String] = PAGE_FONT_FAMILIES) -> String {
     var out: [String] = []
     let bodyOnly = cfg.string("latin_scope") == "body"
+    let uiScale = scaleOf(cfg, "font_scale_ui")
     for spec in scopeSpecs(cfg) {
-        let adj = sizeAdjustCSS(spec.scale)
         for fam in families {
+            // 界面字体族走「界面字号」，正文族走中文/英文字号。侧边栏基准只有
+            // 13px，跟着正文一起放大时看不出变化，分开给一个数才调得动。
+            let adj = sizeAdjustCSS(ICON_BEARING_FAMILIES.contains(fam) ? uiScale : spec.scale)
             // 「仅正文」：界面字体族整个跳过。小字号的界面标签换成正文衬线体
             // 会显得单薄，这个选项就是为此留的。
             if spec.kind == "latin" && bodyOnly && ICON_BEARING_FAMILIES.contains(fam) {

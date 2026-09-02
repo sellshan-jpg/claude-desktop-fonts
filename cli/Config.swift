@@ -16,6 +16,7 @@ struct Config {
         "font_mono_scale": 100,
         "bg_color": "",
         "latin_scope": "all",
+        "font_scale_ui": 100,
     ]
 
     static func load() -> Config {

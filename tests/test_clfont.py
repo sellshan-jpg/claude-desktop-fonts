@@ -524,6 +524,43 @@ def test_latin_scope_does_not_affect_cjk():
     ok(sum('"anthropic-sans"' in f for f in faces) > 0, "中文替换不受英文范围开关影响")
 
 
+@test
+def test_ui_scale_is_independent_from_body():
+    """界面字号必须只作用于界面字体族，正文族不受影响。
+
+    侧边栏基准 13px，跟着正文一起缩放时 110% 只多 1.3px，肉眼看不出——
+    这正是把两者拆开的理由。合在一起就等于这个功能没做。"""
+    M.set_app("/tmp/x.app")
+    cfg = dict(M.DEFAULT_CONFIG, scope="both", font="Songti SC",
+               font_latin="Georgia", font_scale=110, font_scale_latin=110,
+               font_scale_ui=130)
+    css = M.build_css("auto", cfg)
+    faces = re.findall(r'@font-face\{[^}]*\}', css)
+
+    def scales(marker):
+        out = set()
+        for f in faces:
+            if marker not in f:
+                continue
+            m = re.search(r'size-adjust:(\d+)%', f)
+            out.add(m.group(1) if m else "100")
+        return out
+
+    eq(scales('"anthropic-sans"'), {"130"}, "界面族应使用界面字号")
+    eq(scales('"anthropic-serif"'), {"110"}, "正文族应使用正文字号")
+    eq(scales('"ClaudeCJKSerifUI"'), {"130"}, "界面用的中文族应使用界面字号")
+    eq(scales('"ClaudeCJKSerif"'), {"110"}, "正文用的中文族应使用正文字号")
+
+
+@test
+def test_cjk_families_are_wired_to_the_right_variables():
+    """两个中文族要分别挂到正文/界面两个 CDS 变量上，挂错就等于没分开。"""
+    M.set_app("/tmp/x.app")
+    css = M.build_css("auto", dict(M.DEFAULT_CONFIG, scope="cjk", font="Songti SC"))
+    contains(css, '--font-anthropic-serif:"ClaudeCJKSerif"', "正文变量应指向正文族")
+    contains(css, '--font-anthropic-sans:"ClaudeCJKSerifUI"', "界面变量应指向界面族")
+
+
 # ------------------------------------------------- Python / Swift 两版一致性
 #
 # Swift 重写的验收标准：同样的输入，两版输出必须一致。没编译 Swift 版就跳过。
@@ -566,6 +603,9 @@ PARITY_CASES = [
     {"scope": "both", "font": "", "font_latin": ""},
     {"scope": "cjk", "font": "Songti SC", "font_scale": 999},
     {"scope": "latin", "font_latin": "Times New Roman", "latin_scope": "body"},
+    {"scope": "both", "font": "Songti SC", "font_latin": "Georgia",
+     "font_scale": 110, "font_scale_ui": 130},
+    {"scope": "cjk", "font": "Songti SC", "font_scale_ui": 85},
     {"scope": "both", "font": "Songti SC", "font_latin": "Georgia",
      "latin_scope": "body", "font_scale_latin": 110},
 ]

@@ -133,6 +133,7 @@ DEFAULT_CONFIG = {
     "font_mono_scale": 100,   # 代码块字号，百分比
     "bg_color": "",           # 页面底色（空 = 不改），形如 #F0EEE6
     "latin_scope": "all",     # all | body —— 换英文时是否连界面一起换
+    "font_scale_ui": 100,     # 界面字号（侧边栏/输入框/自己发的消息）
 }
 
 
@@ -653,15 +654,22 @@ def scope_specs(cfg):
     return out
 
 
+CJK_FAMILY_BODY = "ClaudeCJKSerif"
+CJK_FAMILY_UI = "ClaudeCJKSerifUI"
+
+
 def font_face_css(cfg):
+    """中文替换用的族。正文与界面各定义一份，除字号外完全相同——
+    这样侧边栏、输入框的中文可以和正文用不同字号。"""
     reg_src, bold_src = _srcs(cfg)
-    adj = size_adjust_css(_scale(cfg, "font_scale"))
-    return (
-        f'@font-face{{font-family:"ClaudeCJKSerif";font-weight:normal;'
-        f'src:{reg_src};unicode-range:{UNICODE_RANGE};{adj}}}'
-        f'@font-face{{font-family:"ClaudeCJKSerif";font-weight:bold;'
-        f'src:{bold_src};unicode-range:{UNICODE_RANGE};{adj}}}'
-    )
+    out = []
+    for fam, key in ((CJK_FAMILY_BODY, "font_scale"), (CJK_FAMILY_UI, "font_scale_ui")):
+        adj = size_adjust_css(_scale(cfg, key))
+        out.append(f'@font-face{{font-family:"{fam}";font-weight:normal;'
+                   f'src:{reg_src};unicode-range:{UNICODE_RANGE};{adj}}}')
+        out.append(f'@font-face{{font-family:"{fam}";font-weight:bold;'
+                   f'src:{bold_src};unicode-range:{UNICODE_RANGE};{adj}}}')
+    return "".join(out)
 
 
 # Claude 正文/界面用的两个 webfont 家族（2026-08-31 在 claude.ai 实测确认）。
@@ -687,9 +695,13 @@ def face_override_css(cfg, families=PAGE_FONT_FAMILIES):
     anthropic-sans 里的字形，一旦覆盖 font-family 就会变成豆腐块。"""
     out = []
     body_only = cfg.get("latin_scope") == "body"
+    ui_scale = _scale(cfg, "font_scale_ui")
     for kind, rng, reg_src, bold_src, scale in scope_specs(cfg):
-        adj = size_adjust_css(scale)
         for fam in families:
+            # 界面字体族走「界面字号」，正文族走中文/英文字号。
+            # 侧边栏基准只有 13px，跟着正文一起放大时看不出变化，
+            # 分开给一个数才调得动。
+            adj = size_adjust_css(ui_scale if fam in ICON_BEARING_FAMILIES else scale)
             # 「仅正文」：界面字体族整个跳过。小字号的界面标签换成正文衬线体
             # 会显得单薄（Times 12pt 比 Helvetica 窄一成半），这个选项就是
             # 为此留的。
@@ -797,8 +809,8 @@ def vars_css():
     """把 ClaudeCJKSerif 前插到 CDS 字体变量——拉丁不受影响（unicode-range）。"""
     return (
         ":root{"
-        f'--font-anthropic-serif:"ClaudeCJKSerif", {CDS_SERIF} !important;'
-        f'--font-anthropic-sans:"ClaudeCJKSerif", {CDS_SANS} !important;'
+        f'--font-anthropic-serif:"{CJK_FAMILY_BODY}", {CDS_SERIF} !important;'
+        f'--font-anthropic-sans:"{CJK_FAMILY_UI}", {CDS_SANS} !important;'
         "}"
     )
 
@@ -1503,6 +1515,8 @@ def cmd_install(args):
         cfg["bg_color"] = args.bg
     if getattr(args, "latin_scope", None) is not None:
         cfg["latin_scope"] = args.latin_scope
+    if getattr(args, "scale_ui", None) is not None:
+        cfg["font_scale_ui"] = args.scale_ui
     if not (scope_specs(cfg) or mono_css(cfg) or background_css(cfg)):
         die("没有任何可应用的设置：scope=%s 对应的字体名为空，"
             "代码块字体与页面底色也都没设。" % cfg["scope"])
@@ -1679,7 +1693,7 @@ def cmd_css(args):
     for key, attr in (("scope", "scope"), ("mode", "mode"), ("font_scale", "scale"),
                       ("font_scale_latin", "scale_latin"), ("font_mono", "mono"),
                       ("font_mono_scale", "mono_scale"), ("bg_color", "bg"),
-                      ("latin_scope", "latin_scope")):
+                      ("latin_scope", "latin_scope"), ("font_scale_ui", "scale_ui")):
         v = getattr(args, attr, None)
         if v is not None:
             cfg[key] = v
@@ -1735,7 +1749,8 @@ def cmd_status(_args):
          f"模式 {cfg.get('mode', 'auto')}")
     info(f"代码块字体 {fmt(cfg.get('font_mono'), _scale(cfg, 'font_mono_scale'))}"
          f"，页面底色 {cfg.get('bg_color') or '—'}"
-         f"，英文范围 {'仅正文' if cfg.get('latin_scope') == 'body' else '全部'}")
+         f"，英文范围 {'仅正文' if cfg.get('latin_scope') == 'body' else '全部'}"
+         f"，界面字号 {_scale(cfg, 'font_scale_ui')}%")
 
 
 def cmd_doctor(_args):
@@ -1889,6 +1904,8 @@ def main():
                            help=f"代码块字号百分比（{SCALE_MIN}–{SCALE_MAX}）")
     p_install.add_argument("--bg", metavar="#RRGGBB",
                            help="页面底色（留空字符串表示不改）")
+    p_install.add_argument("--scale-ui", type=int, metavar="N",
+                           help=f"界面字号百分比（{SCALE_MIN}–{SCALE_MAX}，默认 100）")
     p_install.add_argument("--latin-scope", choices=["all", "body"],
                            help="换英文时的范围：all=连界面一起换，body=只换正文")
     p_install.add_argument("-y", "--yes", action="store_true",
@@ -1909,6 +1926,7 @@ def main():
     p_css.add_argument("--mono-scale", type=int)
     p_css.add_argument("--bg")
     p_css.add_argument("--latin-scope", choices=["all", "body"])
+    p_css.add_argument("--scale-ui", type=int)
     p_bk = sub.add_parser("backups", help="列出整包备份，可清理旧版本")
     p_bk.add_argument("--prune", action="store_true",
                       help="删除与当前版本不匹配的备份（那些已无法用于还原）")

@@ -102,7 +102,8 @@ func cmdStatus(_ t: AppTarget) {
          + "模式 \(cfg.mode)")
     info("代码块字体 \(fmt(cfg.string("font_mono"), scaleOf(cfg, "font_mono_scale")))"
          + "，页面底色 \(cfg.string("bg_color").isEmpty ? "—" : cfg.string("bg_color"))"
-         + "，英文范围 \(cfg.string("latin_scope") == "body" ? "仅正文" : "全部")")
+         + "，英文范围 \(cfg.string("latin_scope") == "body" ? "仅正文" : "全部")"
+         + "，界面字号 \(scaleOf(cfg, "font_scale_ui"))%")
 }
 
 // ---------------------------------------------------------------- doctor
