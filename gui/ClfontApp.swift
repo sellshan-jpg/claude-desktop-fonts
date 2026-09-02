@@ -53,6 +53,10 @@ final class Copy: ObservableObject {
         "toolchain.recheck": "我已安装，重新检测",
         "toolchain.title": "需要先安装 Xcode 命令行工具",
         "stale.action": "重新应用",
+        "update.auto": "启动时自动检查更新",
+        "update.body": "下载后替换「应用程序」中的 Clfont 即可，字体设置会保留。若此前已为 Claude 应用过字体，更新后请重新执行一次「应用」。",
+        "update.download": "前往下载",
+        "update.later": "以后再说",
         "stale.body": "Claude 的自动更新会重写应用内容，此前应用的字体随之失效。重新应用一次即可恢复，设置无需重新选择。",
         "stale.title": "Claude 已更新，此前应用的字体已失效",
         "helper.body": "早期版本的 Clfont 在重新签名时会一并清除 Claude 内部组件的系统权限，导致 Cowork、虚拟机等功能不可用。重新应用一次，程序会从完整备份还原后再进行修改；若没有可用备份，请重新下载安装 Claude。",
@@ -197,6 +201,7 @@ let releaseNotes: [ReleaseNote] = [
             "对早期版本造成的上述权限缺失，程序会在检测到时提示，并在下次「应用」时从完整备份自动修复。",
             "Claude 自动更新覆盖已应用的字体时，主界面会直接给出提示与重新应用入口，不必自行察觉。",
             "修正测试 Claude 与正式 Claude 共用一份应用记录的问题，两者的状态现已分别记录。",
+            "新增自动检查更新：启动时于后台查询一次，有新版本时在界面中提示。该功能可在「关于」中关闭。",
         ],
         action: "若此前已为 Claude 应用过字体，建议重新执行一次「应用」，以恢复被早期版本清除的系统权限。"),
     ReleaseNote(
@@ -878,6 +883,7 @@ struct ContentView: View {
     @State private var confirmRestore = false
     @State private var showHelp = false
     @State private var showWhatsNew = false
+    @StateObject private var updates = UpdateWatcher()
 #if CLFONT_DEBUG
     @ObservedObject private var copy = Copy.shared
     @State private var showDebug = true
@@ -957,7 +963,10 @@ struct ContentView: View {
 #endif
         }
         .ignoresSafeArea(edges: .top)
-        .onAppear { m.checkTools(); m.loadFonts(); m.loadConfig(); m.refreshAll() }
+        .onAppear {
+            m.checkTools(); m.loadFonts(); m.loadConfig(); m.refreshAll()
+            updates.checkIfDue()
+        }
         .animation(DS.ease24, value: m.target)
         .animation(DS.pop, value: m.scope)
         .animation(DS.pop, value: m.toolsReady)
@@ -1038,6 +1047,23 @@ struct ContentView: View {
                    title: t("helper.title"), message: t("helper.body")) { EmptyView() }
     }
 
+    /// 启动时后台查到的新版本。只在确实有更新时出现，「以后再说」之后同一版本
+    /// 不再打扰；查不到、网络不通都不显示任何东西。
+    private func updateNotice(_ r: Updater.Release) -> some View {
+        NoticeCard(tint: DS.accent, symbol: "arrow.down",
+                   title: "Clfont \(r.tag) 可供下载", message: t("update.body")) {
+            HStack(spacing: 10) {
+                Button(t("update.download")) { NSWorkspace.shared.open(r.page) }
+                    .buttonStyle(.glassProminent).tint(DS.accent)
+                    .buttonBorderShape(.capsule)
+                Button(t("update.later")) { updates.skip() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+            }
+            .padding(.top, 2)
+        }
+    }
+
     private var content: some View {
         VStack(alignment: .leading, spacing: 20) {
             appHeader
@@ -1047,6 +1073,7 @@ struct ContentView: View {
                 if m.current.stale { staleNotice }
                 if !m.current.helperOK { helperNotice }
             }
+            if let r = updates.available { updateNotice(r) }
             targetGroup
             fontGroup
             actions
@@ -1864,6 +1891,60 @@ enum Updater {
     }
 }
 
+/// 启动时在后台静默检查一次新版本。
+///
+/// 三条原则：一天最多查一次；查失败一声不吭（自动检查不该因为断网打扰用户，
+/// 手动「检查更新」仍会如实报错）；同一个版本被「以后再说」掉之后不再提示。
+@MainActor
+final class UpdateWatcher: ObservableObject {
+    @Published var available: Updater.Release?
+
+    private static let interval: TimeInterval = 24 * 3600
+    private static let kEnabled = "autoCheckUpdates"
+    private static let kLastCheck = "lastUpdateCheck"
+    private static let kSkipped = "skippedUpdateTag"
+
+    private let d = UserDefaults.standard
+
+    /// 默认开启；用户可在「关于」里关掉
+    var enabled: Bool {
+        get { d.object(forKey: Self.kEnabled) as? Bool ?? true }
+        set {
+            d.set(newValue, forKey: Self.kEnabled)
+            if !newValue { available = nil }
+            objectWillChange.send()
+        }
+    }
+
+    func checkIfDue() {
+        guard enabled,
+              Date().timeIntervalSince1970 - d.double(forKey: Self.kLastCheck) > Self.interval
+        else { return }
+        Task {
+            let result = await Updater.latest()
+            // 只有真的问到了答案才记时间戳；断网时留到下次启动再试
+            guard case .release(let r) = result else {
+                if case .noRelease = result { stampNow() }
+                return
+            }
+            stampNow()
+            guard Updater.isNewer(r.tag, than: Updater.version),
+                  d.string(forKey: Self.kSkipped) != r.tag else { return }
+            withAnimation(DS.ease) { available = r }
+        }
+    }
+
+    /// 「以后再说」：记下这个版本号，下次有更新的版本才再提示
+    func skip() {
+        if let tag = available?.tag { d.set(tag, forKey: Self.kSkipped) }
+        withAnimation(DS.ease) { available = nil }
+    }
+
+    private func stampNow() {
+        d.set(Date().timeIntervalSince1970, forKey: Self.kLastCheck)
+    }
+}
+
 /// 检查更新按钮：自带状态，结果就地显示。关于窗口与「新特性」共用。
 struct UpdateCheckButton: View {
     /// true = 关于窗口里的整行按钮；false = 弹层底部的紧凑样式
@@ -1923,6 +2004,9 @@ struct UpdateCheckButton: View {
         checking = true; note = ""
         Task {
             defer { checking = false }
+            // 手动查过就算今天查过了，启动时不必再查一遍
+            UserDefaults.standard.set(Date().timeIntervalSince1970,
+                                      forKey: "lastUpdateCheck")
             switch await Updater.latest() {
             case .release(let r):
                 if Updater.isNewer(r.tag, than: Updater.version) {
@@ -1941,6 +2025,9 @@ struct UpdateCheckButton: View {
 }
 
 struct AboutView: View {
+    /// 只为让开关能刷新界面；实际读写走 UserDefaults
+    @AppStorage("autoCheckUpdates") private var autoCheck = true
+
     var body: some View {
         VStack(spacing: 0) {
             VStack(spacing: 10) {
@@ -1966,6 +2053,10 @@ struct AboutView: View {
                     Spacer()
                     Text("赵万（Jovan）").font(.system(size: 12.5, weight: .medium))
                 }
+
+                Toggle(t("update.auto"), isOn: $autoCheck)
+                    .toggleStyle(.switch).controlSize(.small)
+                    .font(.system(size: 12.5))
 
                 UpdateCheckButton(fullWidth: true)
             }
