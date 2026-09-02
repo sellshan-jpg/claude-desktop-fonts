@@ -150,7 +150,7 @@ final class Copy: ObservableObject {
         "font.latin.body": "仅回复",
         "font.latin.all": "全部",
         "font.ui.size": "侧栏和底栏字号优化",
-        "font.ui.desc": "此选项影响侧栏、底栏和用户发出消息的字号。侧栏和底栏的字号变化幅度较低。",
+        "font.ui.desc": "此选项影响侧栏、底栏和用户发出消息的字号。侧栏和底栏的字号变化幅度较低。上方选择的范围完全不涉及界面时，本栏会隐藏。",
         "font.mode": "兼容模式",
         "font.mode.std": "标准",
         "font.mode.ext": "扩展",
@@ -217,7 +217,7 @@ final class Copy: ObservableObject {
         "sheet.apply.go": "应用",
 
         "sheet.applying.title": "正在应用",
-        "sheet.applying.perm": "首次使用或 Clfont 更新后，系统可能拦截本次修改并显示下方提示。请点击其中的「允许…」；若已错过该提示，请前往「系统设置 → 隐私与安全性 → App 管理」，为 Clfont 打开开关后重新执行。",
+        "sheet.applying.perm": "首次使用或 Clfont 更新后，系统可能拦截本次修改并显示下方提示。请点击其中的「允许…」。若已错过该提示，可用下方按钮前往设置，为 Clfont 打开开关后重新执行。",
         "sheet.applying.hint": "此窗口会在完成后自动关闭，期间请勿关闭应用。",
 
         "sheet.restart.title": "即将重新启动 Claude",
@@ -376,7 +376,7 @@ final class Copy: ObservableObject {
         "font.latin.body": "Replies only",
         "font.latin.all": "Everything",
         "font.ui.size": "Sidebar and bottom bar",
-        "font.ui.desc": "Affects the sidebar, the bottom bar and the messages you send. The sidebar and bottom bar shift only slightly.",
+        "font.ui.desc": "Affects the sidebar, the bottom bar and the messages you send. The sidebar and bottom bar shift only slightly. Hidden when nothing you selected above touches the interface.",
         "font.mode": "Compatibility",
         "font.mode.std": "Standard",
         "font.mode.ext": "Extended",
@@ -437,7 +437,7 @@ final class Copy: ObservableObject {
         "sheet.apply.go": "Apply",
 
         "sheet.applying.title": "Applying",
-        "sheet.applying.perm": "On a first run, or after Clfont updates, macOS may block the change and show the notice below. Click Allow. If you missed it, open System Settings → Privacy & Security → App Management, switch Clfont on, and run this again.",
+        "sheet.applying.perm": "On a first run, or after Clfont updates, macOS may block the change and show the notice below. Click Allow. If you missed it, the button underneath opens the right settings page — switch Clfont on there and run this again.",
         "sheet.applying.hint": "This window closes on its own when the work is done. Leave the app running.",
 
         "sheet.restart.title": "Claude is about to restart",
@@ -2130,6 +2130,30 @@ struct ContentView: View {
                 }
                 .padding(.horizontal, 16).padding(.vertical, 11)
 
+                // 紧挨着「替换范围」：两者都是「改哪些地方」的决定。此前它埋在
+                // 「英文」分组里，读起来像英文的一个细节设置，可它决定的是界面
+                // 会不会被改——而那正是下面「界面」一栏出现与否的前提。
+                if m.replacesLatin {
+                    VStack(spacing: 0) {
+                        Divider().opacity(0.5)
+                        HStack(spacing: 16) {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(t("row.apply")).font(.system(size: 14))
+                                Text(t("font.latin.where.desc"))
+                                    .font(.system(size: 12)).foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer()
+                            GlassSwitch(selection: $m.latinScope,
+                                        options: [SwitchOption(value: "body", label: t("font.latin.body")),
+                                                  SwitchOption(value: "all", label: t("font.latin.all"))])
+                                .frame(width: 170)
+                        }
+                        .padding(.horizontal, 16).padding(.vertical, 11)
+                    }
+                    .transition(DS.rowInsert)
+                }
+
                 if m.replacesCJK {
                     VStack(spacing: 0) {
                         cardSection(t("font.sec.cjk"))
@@ -2154,20 +2178,6 @@ struct ContentView: View {
                         }
                         .padding(.horizontal, 16).padding(.vertical, 9)
                         scaleRow(t("row.size"), $m.fontScaleLatin)
-                        HStack(spacing: 16) {
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(t("row.apply")).font(.system(size: 14))
-                                Text(t("font.latin.where.desc"))
-                                    .font(.system(size: 12)).foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            Spacer()
-                            GlassSwitch(selection: $m.latinScope,
-                                        options: [SwitchOption(value: "body", label: t("font.latin.body")),
-                                                  SwitchOption(value: "all", label: t("font.latin.all"))])
-                                .frame(width: 170)
-                        }
-                        .padding(.horizontal, 16).padding(.vertical, 9)
                     }
                     .transition(DS.rowInsert)
                 }
@@ -2690,10 +2700,18 @@ struct ContentView: View {
                     .font(.system(size: 12.5)).foregroundStyle(.secondary)
                     .lineSpacing(2.5)
                     .fixedSize(horizontal: false, vertical: true)
-                VStack(spacing: 9) {
-                    guideImage("permission-alert")
-                    guideImage("permission-settings")
+                guideImage("permission-alert")
+                Button {
+                    NSWorkspace.shared.open(URL(string:
+                        "x-apple.systempreferences:com.apple.preference.security?Privacy_AppBundles")!)
+                } label: {
+                    Text(t("appmgmt.open"))
+                        .font(.system(size: 13, weight: .medium))
+                        .frame(maxWidth: .infinity).frame(height: 32)
                 }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.capsule)
+
                 Text(t("sheet.applying.hint"))
                     .font(.system(size: 11.5)).foregroundStyle(.tertiary)
             }
@@ -2746,13 +2764,11 @@ struct ContentView: View {
 
     private func guideImage(_ name: String) -> some View {
         Group {
+            // 截图本身带透明通道，直接贴上去即可；套边框和底色反而像贴了张卡片
             if let url = Bundle.main.url(forResource: name, withExtension: "png"),
                let img = NSImage(contentsOf: url) {
                 Image(nsImage: img).resizable().scaledToFit()
                     .frame(maxWidth: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1))
             }
         }
     }
