@@ -16,6 +16,9 @@ let UNICODE_RANGE_LATIN = "U+0020-007E"
 // 图标落在 U+00C9 一带，而图标是 anthropic-sans 的字形；正文走 anthropic-serif。
 let UNICODE_RANGE_LATIN_EXT = "U+00C0-00FF, U+0100-017F"
 
+// 承载图标的字体族。同一批族也正好是「界面字体」：实测 anthropic-sans 用于
+// 界面 chrome、输入框和用户自己发的消息，anthropic-serif 用于 Claude 的回复
+// 与标题。所以 latin_scope=body 时跳过它们，等价于「只换正文、不动界面」。
 let ICON_BEARING_FAMILIES: Set<String> = ["anthropic-sans"]
 let PAGE_FONT_FAMILIES = ["anthropic-sans", "anthropic-serif"]
 
@@ -130,9 +133,15 @@ func varsCSS() -> String {
 /// 字形，一旦覆盖 font-family 就会变成豆腐块。
 func faceOverrideCSS(_ cfg: Config, _ families: [String] = PAGE_FONT_FAMILIES) -> String {
     var out: [String] = []
+    let bodyOnly = cfg.string("latin_scope") == "body"
     for spec in scopeSpecs(cfg) {
         let adj = sizeAdjustCSS(spec.scale)
         for fam in families {
+            // 「仅正文」：界面字体族整个跳过。小字号的界面标签换成正文衬线体
+            // 会显得单薄，这个选项就是为此留的。
+            if spec.kind == "latin" && bodyOnly && ICON_BEARING_FAMILIES.contains(fam) {
+                continue
+            }
             // 正文字体可以连重音字母一起换；承载图标的界面字体不行
             var frng = spec.range
             if spec.kind == "latin" && !ICON_BEARING_FAMILIES.contains(fam) {

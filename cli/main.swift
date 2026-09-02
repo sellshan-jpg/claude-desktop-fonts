@@ -16,7 +16,7 @@ struct Args {
 let boolFlags: Set<String> = ["--prune", "--purge", "--all"]
 let takesValue: Set<String> = ["--app", "--scope", "--mode", "--scale",
                                "--scale-latin", "--mono", "--mono-scale", "--bg",
-                               "--in", "--out"]
+                               "--in", "--out", "--latin-scope"]
 
 func parseArgs() -> Args {
     var a = Args()
@@ -50,6 +50,7 @@ func applyOverrides(_ cfg: inout Config, _ a: Args) {
     if let v = a.str("--mono") { cfg.set("font_mono", v) }
     if let v = a.int("--mono-scale") { cfg.set("font_mono_scale", v) }
     if let v = a.str("--bg") { cfg.set("bg_color", v) }
+    if let v = a.str("--latin-scope") { cfg.set("latin_scope", v) }
 }
 
 switch args.cmd {

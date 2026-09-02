@@ -132,6 +132,7 @@ DEFAULT_CONFIG = {
     "font_mono": "",          # 代码块字体（空 = 不改）
     "font_mono_scale": 100,   # 代码块字号，百分比
     "bg_color": "",           # 页面底色（空 = 不改），形如 #F0EEE6
+    "latin_scope": "all",     # all | body —— 换英文时是否连界面一起换
 }
 
 
@@ -685,9 +686,15 @@ def face_override_css(cfg, families=PAGE_FONT_FAMILIES):
     渲染。好处是**完全不改任何 font-family**——侧边栏那些图标其实就是
     anthropic-sans 里的字形，一旦覆盖 font-family 就会变成豆腐块。"""
     out = []
+    body_only = cfg.get("latin_scope") == "body"
     for kind, rng, reg_src, bold_src, scale in scope_specs(cfg):
         adj = size_adjust_css(scale)
         for fam in families:
+            # 「仅正文」：界面字体族整个跳过。小字号的界面标签换成正文衬线体
+            # 会显得单薄（Times 12pt 比 Helvetica 窄一成半），这个选项就是
+            # 为此留的。
+            if kind == "latin" and body_only and fam in ICON_BEARING_FAMILIES:
+                continue
             # 正文字体可以连重音字母一起换；承载图标的界面字体不行
             frng = rng
             if kind == "latin" and fam not in ICON_BEARING_FAMILIES:
@@ -1494,6 +1501,8 @@ def cmd_install(args):
         cfg["font_mono_scale"] = args.mono_scale
     if getattr(args, "bg", None) is not None:
         cfg["bg_color"] = args.bg
+    if getattr(args, "latin_scope", None) is not None:
+        cfg["latin_scope"] = args.latin_scope
     if not (scope_specs(cfg) or mono_css(cfg) or background_css(cfg)):
         die("没有任何可应用的设置：scope=%s 对应的字体名为空，"
             "代码块字体与页面底色也都没设。" % cfg["scope"])
@@ -1669,7 +1678,8 @@ def cmd_css(args):
     cfg = load_config()
     for key, attr in (("scope", "scope"), ("mode", "mode"), ("font_scale", "scale"),
                       ("font_scale_latin", "scale_latin"), ("font_mono", "mono"),
-                      ("font_mono_scale", "mono_scale"), ("bg_color", "bg")):
+                      ("font_mono_scale", "mono_scale"), ("bg_color", "bg"),
+                      ("latin_scope", "latin_scope")):
         v = getattr(args, attr, None)
         if v is not None:
             cfg[key] = v
@@ -1724,7 +1734,8 @@ def cmd_status(_args):
          f"英文字体 {fmt(cfg.get('font_latin'), _scale(cfg, 'font_scale_latin'))}，"
          f"模式 {cfg.get('mode', 'auto')}")
     info(f"代码块字体 {fmt(cfg.get('font_mono'), _scale(cfg, 'font_mono_scale'))}"
-         f"，页面底色 {cfg.get('bg_color') or '—'}")
+         f"，页面底色 {cfg.get('bg_color') or '—'}"
+         f"，英文范围 {'仅正文' if cfg.get('latin_scope') == 'body' else '全部'}")
 
 
 def cmd_doctor(_args):
@@ -1878,6 +1889,8 @@ def main():
                            help=f"代码块字号百分比（{SCALE_MIN}–{SCALE_MAX}）")
     p_install.add_argument("--bg", metavar="#RRGGBB",
                            help="页面底色（留空字符串表示不改）")
+    p_install.add_argument("--latin-scope", choices=["all", "body"],
+                           help="换英文时的范围：all=连界面一起换，body=只换正文")
     p_install.add_argument("-y", "--yes", action="store_true",
                            help="所有确认自动回答 yes")
 
@@ -1895,6 +1908,7 @@ def main():
     p_css.add_argument("--mono")
     p_css.add_argument("--mono-scale", type=int)
     p_css.add_argument("--bg")
+    p_css.add_argument("--latin-scope", choices=["all", "body"])
     p_bk = sub.add_parser("backups", help="列出整包备份，可清理旧版本")
     p_bk.add_argument("--prune", action="store_true",
                       help="删除与当前版本不匹配的备份（那些已无法用于还原）")

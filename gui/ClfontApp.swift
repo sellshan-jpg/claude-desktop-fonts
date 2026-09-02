@@ -62,7 +62,7 @@ final class Copy: ObservableObject {
         "help.step3.body": "效果满意后，切回「正式 Claude」卡片再执行一次。整个过程约 1 至 2 分钟，期间请勿关闭窗口。",
 
         "help.step4.title": "替换范围与字体",
-        "help.step4.body": "「中文」只改中文字形，界面图标不受影响，是推荐选项。「英文」和「中英文」会连界面上的英文一起改；若之后发现个别图标显示异常，改回「中文」即可。\n选定范围后在下方挑字体，预览会立即更新。",
+        "help.step4.body": "「中文」只改中文字形，界面图标不受影响，是推荐选项。「英文」和「中英文」会一并改变英文的观感；若之后发现个别图标显示异常，改回「中文」即可。\n选中英文后，下方会多出「英文替换范围」：「仅正文」只改 Claude 的回复与标题，「全部」连界面、输入框和你自己发的消息一起改。界面上的小号标签换成正文衬线体后往往偏细，介意的话选「仅正文」。\n选定后在下方挑字体，预览会立即更新。",
         "help.step5.title": "字号",
         "help.step5.body": "中文与英文可分别在 80% 到 150% 之间调节，用来弥补宋体这类字体默认显示偏小的问题。\n它只缩放被替换掉的那些字，界面图标、行距与整体布局都不动——不是把整个页面放大。",
         "help.step6.title": "代码块",
@@ -145,6 +145,10 @@ final class Copy: ObservableObject {
         "font.cjk.size": "中文字号",
         "font.latin": "英文字体",
         "font.latin.size": "英文字号",
+        "font.latin.where": "英文替换范围",
+        "font.latin.where.desc": "「仅正文」只改 Claude 的回复与标题；「全部」连界面、输入框和你自己发的消息一起改",
+        "font.latin.body": "仅正文",
+        "font.latin.all": "全部",
         "font.mode": "兼容模式",
         "font.mode.std": "标准",
         "font.mode.ext": "扩展",
@@ -259,7 +263,7 @@ final class Copy: ObservableObject {
         "help.step3.body": "Happy with how it looks? Switch back to the Main Claude card and apply again. It takes a minute or two — leave the window open while it works.",
 
         "help.step4.title": "Scope and fonts",
-        "help.step4.body": "Chinese swaps Chinese characters only and leaves the interface icons alone, which is why it's the default. English and Both change the interface text as well; if an icon ever looks wrong afterwards, switch back to Chinese.\nPick your fonts underneath and the preview updates as you go.",
+        "help.step4.body": "Chinese swaps Chinese characters only and leaves the interface icons alone, which is why it's the default. If an icon ever looks wrong after using English or Both, switch back to Chinese.\nOnce English is in play, a Where row appears: Body text covers Claude's replies and headings, while Everything also takes the interface, the composer and your own messages. Small interface labels tend to look thin in a body serif, so pick Body text if that bothers you.\nPick your fonts underneath and the preview updates as you go.",
         "help.step5.title": "Size",
         "help.step5.body": "Chinese and English each scale from 80% to 150%, which helps with fonts like Songti that come out small at their default size.\nOnly the replaced characters scale. Icons, line spacing and layout stay put, so this is not the same as zooming the page.",
         "help.step6.title": "Code blocks",
@@ -345,6 +349,10 @@ final class Copy: ObservableObject {
         "font.cjk.size": "Chinese size",
         "font.latin": "English font",
         "font.latin.size": "English size",
+        "font.latin.where": "Where",
+        "font.latin.where.desc": "Body text covers Claude's replies and headings. Everything also restyles the interface, the composer and your own messages",
+        "font.latin.body": "Body text",
+        "font.latin.all": "Everything",
         "font.mode": "Compatibility",
         "font.mode.std": "Standard",
         "font.mode.ext": "Extended",
@@ -601,7 +609,8 @@ let releaseNotes: [ReleaseNote] = [
             "代码块与行内代码现可单独指定等宽字体与字号，正文不受影响。位于主界面「代码块」一栏。",
             "界面支持简体中文与英文，默认跟随系统语言。入口在标题栏右侧的地球图标。该设置仅作用于 Clfont 自身，不会改变 Claude。",
             "修复替换英文时带重音的拉丁字母（é ü ñ 等）不跟随变化的问题。此前这些字符会保留原字体，导致欧洲语言正文出现明显混排。",
-            "重写使用指引，五项设置各自单独说明。",
+            "换英文时可选择只改正文，或连界面一起改。界面上的小号标签换成正文衬线体后会显得偏细，此选项用于避免该问题。位于「英文字号」下方，仅在替换英文时出现。",
+            "重写使用指引，各项设置单独说明。",
         ],
         en: [
             "The Xcode Command Line Tools are no longer required. They used to be a prerequisite; that hurdle is gone. The command-line half was rewritten and now ships inside the app.",
@@ -609,7 +618,8 @@ let releaseNotes: [ReleaseNote] = [
             "Code blocks and inline code can now take their own monospace font and size, leaving body text alone. Look under Code blocks.",
             "The interface comes in Simplified Chinese and English, following your system by default. It's behind the globe icon in the title bar — and it only changes Clfont, never Claude.",
             "Fixed accented Latin letters (é, ü, ñ and the rest) keeping their old font when replacing English, which left European text visibly mismatched.",
-            "Rewrote the guide, with a section for each of the five settings.",
+            "When replacing English you can now limit it to body text, or take the whole interface. Small interface labels look thin in a body serif, and this is the way around that. It sits under English size, and only appears when you're replacing English.",
+            "Rewrote the guide, with a section for each setting.",
         ],
         actionZH: nil, actionEN: nil, major: true),
     ReleaseNote(
@@ -819,6 +829,10 @@ final class OutputBox: @unchecked Sendable {
     @Published var fontMonoScale = 100.0
     /// 页面底色。空 = 不改。形如 #F0EEE6，只在浅色模式生效。
     @Published var bgColor = ""
+    /// 换英文时的范围：all = 连界面一起换，body = 只换正文。
+    /// 界面字体族（anthropic-sans）同时用于界面 chrome、输入框和用户自己发的
+    /// 消息；小字号的界面标签换成正文衬线体会显得单薄，所以留这个开关。
+    @Published var latinScope = "all"
     /// 上一次修改操作是否因缺少「App 管理」权限被系统拦下。
     /// 不做启动时的主动探测——那需要真的去写一次 Claude，会在用户还没提出
     /// 任何要求时就弹出系统授权请求。等到操作真的失败再提示，时机才对。
@@ -905,6 +919,7 @@ final class OutputBox: @unchecked Sendable {
         fontMono = j["font_mono"] as? String ?? fontMono
         fontMonoScale = (j["font_mono_scale"] as? NSNumber)?.doubleValue ?? fontMonoScale
         bgColor = j["bg_color"] as? String ?? bgColor
+        latinScope = j["latin_scope"] as? String ?? latinScope
     }
 
     func saveConfig() {
@@ -922,6 +937,7 @@ final class OutputBox: @unchecked Sendable {
         j["font_mono"] = fontMono
         j["font_mono_scale"] = Int(fontMonoScale.rounded())
         j["bg_color"] = bgColor
+        j["latin_scope"] = latinScope
         if let mo = fontChoice(fontMono)?.regular { j["font_mono_regular"] = mo }
         else { j.removeValue(forKey: "font_mono_regular") }
         if let mb = fontChoice(fontMono)?.bold { j["font_mono_bold"] = mb }
@@ -1096,7 +1112,8 @@ final class OutputBox: @unchecked Sendable {
               "--scale-latin", String(Int(fontScaleLatin.rounded())),
               "--mono", fontMono,
               "--mono-scale", String(Int(fontMonoScale.rounded())),
-              "--bg", bgColor], on: tgt,
+              "--bg", bgColor,
+              "--latin-scope", latinScope], on: tgt,
              label: t("busy.install", ["{target}": tgt.label])) {
             [weak self] _, out in
             self?.noteAppMgmt(out)
@@ -2044,6 +2061,23 @@ struct ContentView: View {
                     Divider().opacity(0.5).transition(.opacity)
                     scaleRow(t("font.latin.size"), $m.fontScaleLatin)
                         .transition(.move(edge: .top).combined(with: .opacity))
+
+                    Divider().opacity(0.5).transition(.opacity)
+                    HStack(spacing: 16) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(t("font.latin.where")).font(.system(size: 14))
+                            Text(t("font.latin.where.desc"))
+                                .font(.system(size: 12)).foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer()
+                        GlassSwitch(selection: $m.latinScope,
+                                    options: [SwitchOption(value: "body", label: t("font.latin.body")),
+                                              SwitchOption(value: "all", label: t("font.latin.all"))])
+                            .frame(width: 170)
+                    }
+                    .padding(.horizontal, 16).padding(.vertical, 11)
+                    .transition(.move(edge: .top).combined(with: .opacity))
                 }
 
                 Divider().opacity(0.5)

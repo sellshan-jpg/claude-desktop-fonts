@@ -496,6 +496,34 @@ def test_patched_preload_survives_line_comment():
         sb.cleanup()
 
 
+@test
+def test_latin_scope_body_skips_ui_family():
+    """「仅正文」必须完全不碰界面字体族。
+
+    anthropic-sans 同时用于界面 chrome、输入框和用户自己发的消息；小字号的
+    界面标签换成正文衬线体会明显偏细（Times 12pt 比 Helvetica 窄约一成半），
+    这个选项就是为此留的。漏掉一条规则，开关就等于没用。"""
+    M.set_app("/tmp/x.app")
+    base = dict(M.DEFAULT_CONFIG, scope="latin", font_latin="Times New Roman")
+    body = M.build_css("auto", dict(base, latin_scope="body"))
+    allx = M.build_css("auto", dict(base, latin_scope="all"))
+    faces_body = re.findall(r'@font-face\{[^}]*\}', body)
+    faces_all = re.findall(r'@font-face\{[^}]*\}', allx)
+    eq(sum('"anthropic-sans"' in f for f in faces_body), 0, "仅正文时不该有界面字体规则")
+    ok(sum('"anthropic-serif"' in f for f in faces_body) > 0, "仅正文时仍要覆盖正文字体")
+    ok(sum('"anthropic-sans"' in f for f in faces_all) > 0, "全部时应覆盖界面字体")
+
+
+@test
+def test_latin_scope_does_not_affect_cjk():
+    """这个开关只管英文。中文替换靠 CDS 变量前插，两个族都要保留。"""
+    M.set_app("/tmp/x.app")
+    cfg = dict(M.DEFAULT_CONFIG, scope="cjk", font="Songti SC", latin_scope="body")
+    css = M.build_css("auto", cfg)
+    faces = re.findall(r'@font-face\{[^}]*\}', css)
+    ok(sum('"anthropic-sans"' in f for f in faces) > 0, "中文替换不受英文范围开关影响")
+
+
 # ------------------------------------------------- Python / Swift 两版一致性
 #
 # Swift 重写的验收标准：同样的输入，两版输出必须一致。没编译 Swift 版就跳过。
@@ -537,6 +565,9 @@ PARITY_CASES = [
     {"scope": "cjk", "font": "Songti SC", "bg_color": "notacolor"},
     {"scope": "both", "font": "", "font_latin": ""},
     {"scope": "cjk", "font": "Songti SC", "font_scale": 999},
+    {"scope": "latin", "font_latin": "Times New Roman", "latin_scope": "body"},
+    {"scope": "both", "font": "Songti SC", "font_latin": "Georgia",
+     "latin_scope": "body", "font_scale_latin": 110},
 ]
 
 
