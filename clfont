@@ -48,6 +48,8 @@ clfont — Claude Desktop 中文字体补丁工具（macOS, Apple Silicon）v4
 测试钩子（仅供自动化测试）：
   --app PATH / CLFONT_APP        操作指定的 .app 副本而非 /Applications/Claude.app
   CLFONT_DATA_DIR                覆盖数据目录（备份/日志/journal）
+  CLFONT_CONFIG                  覆盖配置文件路径
+  CLFONT_BIN_DIR                 覆盖自安装目录（默认 ~/.local/bin）
   CLFONT_SMOKE_USER_DATA_DIR     冒烟测试启动 app 时用的独立 user-data-dir
                                  （测试副本用，避免撞正式 Claude 的 single-instance 锁）
   CLFONT_SMOKE_FORCE_FAIL=1      强制冒烟测试判失败（用于验证 install 的回滚门）
@@ -94,8 +96,10 @@ DATA_DIR = Path(os.environ.get("CLFONT_DATA_DIR",
                                str(Path.home() / ".local/share/clfont")))
 LOG_DIR = DATA_DIR / "logs"
 JOURNAL = DATA_DIR / "journal.json"
-CONFIG_PATH = Path.home() / ".config/clfont/config.json"
-CANON = Path.home() / ".local/bin/clfont"
+CONFIG_PATH = Path(os.environ.get("CLFONT_CONFIG",
+                                  str(Path.home() / ".config/clfont/config.json")))
+CANON = Path(os.environ.get("CLFONT_BIN_DIR",
+                            str(Path.home() / ".local/bin"))) / "clfont"
 
 MARKER = "clfont-v1"
 UNICODE_RANGE = ("U+2E80-2EFF, U+3000-303F, U+3400-4DBF, "

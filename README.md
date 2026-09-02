@@ -222,6 +222,21 @@ Clfont 在首次修改前会创建完整应用备份，保存于
 与 Clfont 相关的问题，欢迎提交至
 [Issues](https://github.com/sellshan-jpg/clfont/issues)。
 
+## 测试
+
+```bash
+python3 tests/test_clfont.py            # 全部
+python3 tests/test_clfont.py test_asar  # 按名字筛选
+UPDATE_GOLDEN=1 python3 tests/test_clfont.py   # 有意改动行为后更新黄金文件
+```
+
+约 75 秒，无第三方依赖。测试分两层：纯函数层直接调用 `clfont` 里的函数；端到端
+层对 `tests/fixture.py` 造的假 Claude.app 跑真命令，覆盖安装、还原、幂等、冒烟
+失败回滚、六个崩溃注入点的恢复，以及 GUI 所依赖的状态标记。
+
+不使用真实的 Claude.app：一次整包备份要 800MB 与约一分钟，且测试一旦改坏它，
+用户日常使用的应用就废了。假 app 只有 64KB，全流程秒级完成。
+
 ## 从源码构建
 
 ```bash
