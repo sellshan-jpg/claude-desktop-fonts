@@ -20,13 +20,13 @@ final class Copy: ObservableObject {
         "font.mode.desc": "「标准」不生效时再用「扩展」，会多覆盖一批常见字体",
         "font.preview.cjk": "字体是沉默的声音",
         "font.scope.desc": "只换中文最安全；换英文会连同界面文字一起改变",
-        "footer.ops": "安装会先退出该 Claude，全程有完整备份；失败或中途取消都会自动回滚，随时可一键还原。重签名后首次启动可能要求重新授权钥匙串，属正常现象。",
+        "footer.ops": "安装会先退出该 Claude，全程有完整备份；失败或中途取消都会把文件恢复原样，随时可用「还原」完全撤销。重签名后首次启动可能要求重新授权钥匙串，属正常现象。",
         "footer.safety": "Clfont 仅在本机修改 Claude 的字体渲染：注入内容只有字体规则，不改动任何网络请求，也不读取账号信息与聊天记录。",
         "header.subtitle": "使用 Clfont，在 Claude 里安全地使用你喜欢的中英文字体",
         "help.footer": "本工具仅修改所选的 Claude 应用包，不读取账号与会话数据。",
         "help.safety.b1": "注入内容仅有字体规则（CSS @font-face），不改动任何网络请求，不伪造客户端身份，也不绕过任何限制或配额。",
         "help.safety.b2": "不读取、不上传账号信息与聊天记录，全部操作都在本机完成。",
-        "help.safety.b3": "安装前会创建完整备份，任一环节失败或中途取消都会自动回滚，随时可一键还原。",
+        "help.safety.b3": "安装前会创建完整备份，任一环节失败或中途取消都会把文件恢复原样，随时可用「还原」完全撤销。",
         "help.safety.title": "关于安全性",
         "help.step1.body": "Clfont 的实际操作由一段脚本完成，它依赖 macOS 的 python3，而该组件由 Xcode 命令行工具提供。未安装时窗口顶部会出现提示，点击其中的「安装命令行工具」按系统引导完成即可，无需下载完整的 Xcode。\n此外，修改 Claude 的应用包需要「App 管理」权限，macOS 会在第一次执行安装时弹出系统请求，请选择「允许」。若此前误选了「不允许」，请前往「系统设置 → 隐私与安全性 → App 管理」，为 Clfont 打开开关后重新执行。本工具不需要「辅助功能」权限。",
         "help.step1.title": "首次使用：命令行工具与「App 管理」权限",
@@ -40,7 +40,7 @@ final class Copy: ObservableObject {
         "help.step5.title": "启动测试 Claude，确认字体效果",
         "help.step6.body": "效果确认无误后，切换回「正式 Claude」卡片，再次执行安装。",
         "help.step6.title": "应用到正式 Claude",
-        "help.step7.body": "安装依次执行：退出目标应用 → 创建完整备份 → 重新打包 → 更新完整性哈希 → 重新签名 → 启动验证。任一环节失败或中途取消，都会自动回滚至原始状态并重新验证签名，因此最坏的结果是「未能应用」，而非应用无法启动。",
+        "help.step7.body": "安装依次执行：退出目标应用 → 创建完整备份 → 重新打包 → 更新完整性哈希 → 重新签名 → 启动验证。任一环节失败或中途取消，都会把文件恢复原样并重新验证签名，因此最坏的结果是「未能应用」，而非应用无法启动。\n需要注意的是，自动回滚不恢复 Claude 的原始签名；如需完全恢复，请执行「还原」。",
         "help.step7.title": "安装流程与失败处理",
         "help.step8.body": "Claude 自动更新会覆盖已应用的修改。此时状态区域会提示此前的修改可能已被更新覆盖，重新执行一次安装即可。",
         "help.step8.title": "Claude 更新后需重新应用",
@@ -1686,6 +1686,7 @@ struct ContentView: View {
                 Divider().opacity(0.5)
 
                 HStack {
+                    UpdateCheckButton()
                     Spacer()
                     Button("知道了") { showWhatsNew = false }
                         .buttonStyle(.glassProminent).tint(DS.accent).controlSize(.large)
@@ -1800,11 +1801,83 @@ enum Updater {
     }
 }
 
-struct AboutView: View {
+/// 检查更新按钮：自带状态，结果就地显示。关于窗口与「新特性」共用。
+struct UpdateCheckButton: View {
+    /// true = 关于窗口里的整行按钮；false = 弹层底部的紧凑样式
+    var fullWidth = false
+
     @State private var checking = false
     @State private var note = ""
     @State private var newRelease: Updater.Release?
 
+    var body: some View {
+        Group {
+            if fullWidth {
+                VStack(spacing: 12) { button; noteText }
+            } else {
+                HStack(spacing: 10) { button; noteText }
+            }
+        }
+    }
+
+    @ViewBuilder private var button: some View {
+        if let r = newRelease {
+            Button { NSWorkspace.shared.open(r.page) } label: { label("前往下载") }
+                .buttonStyle(.glassProminent)
+                .buttonBorderShape(.capsule).tint(DS.accent)
+        } else {
+            Button { check() } label: { label("检查更新") }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.capsule)
+                .disabled(checking)
+        }
+    }
+
+    @ViewBuilder private var noteText: some View {
+        if !note.isEmpty {
+            Text(note)
+                .font(.system(size: 11.5)).foregroundStyle(.secondary)
+                .multilineTextAlignment(fullWidth ? .center : .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func label(_ title: String) -> some View {
+        HStack(spacing: 6) {
+            if checking { ProgressView().controlSize(.small) }
+            Text(title).font(.system(size: 13, weight: .medium))
+        }
+        .frame(maxWidth: fullWidth ? .infinity : nil)
+        .frame(height: fullWidth ? 32 : 26)
+        .padding(.horizontal, fullWidth ? 0 : 12)
+    }
+
+    private func check() {
+        guard !Updater.repo.isEmpty else {
+            note = "还没上架 GitHub，暂时没有可检查的版本。"
+            return
+        }
+        checking = true; note = ""
+        Task {
+            defer { checking = false }
+            switch await Updater.latest() {
+            case .release(let r):
+                if Updater.isNewer(r.tag, than: Updater.version) {
+                    newRelease = r
+                    note = "有新版本 \(r.tag)。"
+                } else {
+                    note = "已是最新版本。"
+                }
+            case .noRelease:
+                note = "仓库里还没有发布任何版本。"
+            case .failed(let why):
+                note = "检查失败：\(why)"
+            }
+        }
+    }
+}
+
+struct AboutView: View {
     var body: some View {
         VStack(spacing: 0) {
             VStack(spacing: 10) {
@@ -1831,23 +1904,7 @@ struct AboutView: View {
                     Text("赵万（Jovan）").font(.system(size: 12.5, weight: .medium))
                 }
 
-                if let r = newRelease {
-                    Button { NSWorkspace.shared.open(r.page) } label: { buttonLabel("前往下载") }
-                        .buttonStyle(.glassProminent)
-                        .buttonBorderShape(.capsule).tint(DS.accent)
-                } else {
-                    Button { check() } label: { buttonLabel("检查更新") }
-                        .buttonStyle(.glass)
-                        .buttonBorderShape(.capsule)
-                        .disabled(checking)
-                }
-
-                if !note.isEmpty {
-                    Text(note)
-                        .font(.system(size: 11.5)).foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                UpdateCheckButton(fullWidth: true)
             }
             .padding(.horizontal, 28).padding(.vertical, 18)
 
@@ -1859,38 +1916,6 @@ struct AboutView: View {
         }
         .frame(width: 360)
         .background { Color(nsColor: .windowBackgroundColor).ignoresSafeArea() }
-    }
-
-    private func buttonLabel(_ title: String) -> some View {
-        HStack(spacing: 6) {
-            if checking { ProgressView().controlSize(.small) }
-            Text(title).font(.system(size: 13, weight: .medium))
-        }
-        .frame(maxWidth: .infinity).frame(height: 32)
-    }
-
-    private func check() {
-        guard !Updater.repo.isEmpty else {
-            note = "还没上架 GitHub，暂时没有可检查的版本。"
-            return
-        }
-        checking = true; note = ""
-        Task {
-            defer { checking = false }
-            switch await Updater.latest() {
-            case .release(let r):
-                if Updater.isNewer(r.tag, than: Updater.version) {
-                    newRelease = r
-                    note = "有新版本 \(r.tag)。"
-                } else {
-                    note = "已是最新版本。"
-                }
-            case .noRelease:
-                note = "仓库里还没有发布任何版本。"
-            case .failed(let why):
-                note = "检查失败：\(why)"
-            }
-        }
     }
 }
 
