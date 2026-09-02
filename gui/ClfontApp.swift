@@ -534,6 +534,15 @@ enum DS {
     /// 弹层入场
     static let pop = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.24)
 
+    /// 卡片内插入/移除一行时的过渡。
+    ///
+    /// 不用 .move(edge: .top)：那会让新行从上一行背后滑出来，像穿模。行插入的
+    /// 真实视觉是「容器高度撑开、内容随后淡入」，所以进场让淡入稍晚一点，等
+    /// 高度先长开；退场则先把内容淡掉再收高度。
+    static let rowInsert = AnyTransition.asymmetric(
+        insertion: .opacity.animation(ease.delay(0.07)),
+        removal: .opacity.animation(.easeOut(duration: 0.12)))
+
     static let card = RoundedRectangle(cornerRadius: 12, style: .continuous)
     static let tile = RoundedRectangle(cornerRadius: 13, style: .continuous)
     static let button = RoundedRectangle(cornerRadius: 11, style: .continuous)
@@ -1494,6 +1503,7 @@ struct ContentView: View {
         }
         .animation(DS.ease24, value: m.target)
         .animation(DS.pop, value: m.scope)
+        .animation(DS.pop, value: m.latinScope)
         .onChange(of: m.target) { _, t in
             if detailOpen { m.loadBackups(t) }   // 有缓存就直接用，不再扫盘
         }
@@ -2047,37 +2057,34 @@ struct ContentView: View {
                 .padding(.horizontal, 16).padding(.vertical, 11)
 
                 if m.replacesCJK {
-                    Divider().opacity(0.5)
-                        .transition(.opacity)
-                    HStack(spacing: 16) {
-                        Text(t("font.cjk")).font(.system(size: 14))
-                        Spacer()
-                        fontMenu(selection: $m.fontFamily, list: m.fonts)
+                    VStack(spacing: 0) {
+                        Divider().opacity(0.5)
+                        HStack(spacing: 16) {
+                            Text(t("font.cjk")).font(.system(size: 14))
+                            Spacer()
+                            fontMenu(selection: $m.fontFamily, list: m.fonts)
+                        }
+                        .padding(.horizontal, 16).padding(.vertical, 11)
+                        Divider().opacity(0.5)
+                        scaleRow(t("font.cjk.size"), $m.fontScale)
                     }
-                    .padding(.horizontal, 16).padding(.vertical, 11)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-
-                    Divider().opacity(0.5).transition(.opacity)
-                    scaleRow(t("font.cjk.size"), $m.fontScale)
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                    .transition(DS.rowInsert)
                 }
 
                 if m.replacesLatin {
+                    VStack(spacing: 0) {
                     Divider().opacity(0.5)
-                        .transition(.opacity)
                     HStack(spacing: 16) {
                         Text(t("font.latin")).font(.system(size: 14))
                         Spacer()
                         fontMenu(selection: $m.fontLatin, list: m.latinFonts)
                     }
                     .padding(.horizontal, 16).padding(.vertical, 11)
-                    .transition(.move(edge: .top).combined(with: .opacity))
 
-                    Divider().opacity(0.5).transition(.opacity)
+                    Divider().opacity(0.5)
                     scaleRow(t("font.latin.size"), $m.fontScaleLatin)
-                        .transition(.move(edge: .top).combined(with: .opacity))
 
-                    Divider().opacity(0.5).transition(.opacity)
+                    Divider().opacity(0.5)
                     HStack(spacing: 16) {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(t("font.latin.where")).font(.system(size: 14))
@@ -2092,21 +2099,23 @@ struct ContentView: View {
                             .frame(width: 170)
                     }
                     .padding(.horizontal, 16).padding(.vertical, 11)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                    .transition(DS.rowInsert)
                 }
 
                 // 界面字体族被覆盖时这一项才有意义：换中文时它一直生效（侧栏的
                 // 聊天标题就是中文），换英文时只在「全部」下生效。
                 if m.uiScaleApplies {
-                    Divider().opacity(0.5).transition(.opacity)
+                    // 分隔线与内容合成一个整体过渡；分开各动各的会脱节
                     VStack(alignment: .leading, spacing: 2) {
+                        Divider().opacity(0.5)
                         scaleRow(t("font.ui.size"), $m.fontScaleUI)
                         Text(t("font.ui.desc"))
                             .font(.system(size: 12)).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                             .padding(.horizontal, 16).padding(.bottom, 10)
                     }
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .transition(DS.rowInsert)
                 }
 
                 Divider().opacity(0.5)
