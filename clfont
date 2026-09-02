@@ -1665,6 +1665,17 @@ def cmd_uninstall(args):
         sys.exit(1)
 
 
+def cmd_css(args):
+    cfg = load_config()
+    for key, attr in (("scope", "scope"), ("mode", "mode"), ("font_scale", "scale"),
+                      ("font_scale_latin", "scale_latin"), ("font_mono", "mono"),
+                      ("font_mono_scale", "mono_scale"), ("bg_color", "bg")):
+        v = getattr(args, attr, None)
+        if v is not None:
+            cfg[key] = v
+    sys.stdout.write(build_css(cfg.get("mode", "auto"), cfg))
+
+
 def cmd_status(_args):
     cfg = load_config()
     version = claude_version()
@@ -1874,6 +1885,16 @@ def main():
     p_un.add_argument("-y", "--yes", action="store_true")
 
     sub.add_parser("status", help="显示当前状态")
+    # 隐藏命令：打印将要注入的 CSS。供回归测试比对 Python 版与 Swift 版的输出，
+    # 也方便排查「补丁装上了但没生效」时到底注入了什么。
+    p_css = sub.add_parser("_css", help=argparse.SUPPRESS)
+    p_css.add_argument("--scope", choices=["cjk", "latin", "both"])
+    p_css.add_argument("--mode", choices=["auto", "brute"])
+    p_css.add_argument("--scale", type=int)
+    p_css.add_argument("--scale-latin", type=int)
+    p_css.add_argument("--mono")
+    p_css.add_argument("--mono-scale", type=int)
+    p_css.add_argument("--bg")
     p_bk = sub.add_parser("backups", help="列出整包备份，可清理旧版本")
     p_bk.add_argument("--prune", action="store_true",
                       help="删除与当前版本不匹配的备份（那些已无法用于还原）")
@@ -1893,7 +1914,7 @@ def main():
     L.open(args.cmd)
     {"install": cmd_install, "uninstall": cmd_uninstall,
      "status": cmd_status, "doctor": cmd_doctor,
-     "backups": cmd_backups}[args.cmd](args)
+     "backups": cmd_backups, "_css": cmd_css}[args.cmd](args)
 
 
 if __name__ == "__main__":

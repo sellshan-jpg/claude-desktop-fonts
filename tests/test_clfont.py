@@ -491,6 +491,86 @@ def test_patched_preload_survives_line_comment():
         sb.cleanup()
 
 
+# ------------------------------------------------- Python / Swift 两版一致性
+#
+# Swift 重写的验收标准：同样的输入，两版输出必须一致。没编译 Swift 版就跳过。
+
+SWIFT_BIN = ROOT / "build" / "clfont-swift"
+
+
+def swift_available():
+    return SWIFT_BIN.exists()
+
+
+def both_css(spec):
+    """用同一份配置分别跑两版的 _css，返回 (python 输出, swift 输出)。"""
+    tmp = Path(tempfile.mkdtemp(prefix="clfont-parity-"))
+    try:
+        cfg = tmp / "config.json"
+        cfg.write_text(json.dumps(spec))
+        env = dict(os.environ, CLFONT_CONFIG=str(cfg))
+        py = subprocess.run([sys.executable, str(ROOT / "clfont"), "_css"],
+                            capture_output=True, text=True, env=env).stdout
+        sw = subprocess.run([str(SWIFT_BIN), "_css"],
+                            capture_output=True, text=True, env=env).stdout
+        return py, sw
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+PARITY_CASES = [
+    {"scope": "cjk", "font": "Songti SC"},
+    {"scope": "latin", "font_latin": "Times New Roman"},
+    {"scope": "both", "font": "Songti SC", "font_latin": "Times New Roman",
+     "font_scale": 120, "font_scale_latin": 90},
+    {"scope": "both", "font": "Songti SC", "font_latin": "Georgia", "mode": "brute"},
+    {"scope": "cjk", "font": "Songti SC", "font_mono": "Menlo",
+     "font_mono_scale": 110, "bg_color": "#F0EEE6"},
+    {"scope": "cjk", "font": "PingFang SC", "font_regular": "PingFangSC-Regular",
+     "font_bold": "PingFangSC-Semibold"},
+    {"scope": "latin", "font_latin": "Inter", "font_scale_latin": 150},
+    {"scope": "cjk", "font": "Songti SC", "bg_color": "notacolor"},
+    {"scope": "both", "font": "", "font_latin": ""},
+    {"scope": "cjk", "font": "Songti SC", "font_scale": 999},
+]
+
+
+@test
+def test_parity_css_matches_python():
+    if not swift_available():
+        print("      （跳过：未编译 Swift 版，先跑 cli/build.sh）")
+        return
+    for spec in PARITY_CASES:
+        py, sw = both_css(spec)
+        if py != sw:
+            raise AssertionError(f"配置 {spec} 下两版 CSS 不一致\n"
+                                 f"  python 长度 {len(py)}，swift 长度 {len(sw)}")
+
+
+@test
+def test_parity_asar_repack_byte_identical():
+    """Swift 版原样重打包必须与原文件逐字节一致——整个方案的正确性自证。"""
+    if not swift_available():
+        print("      （跳过：未编译 Swift 版）")
+        return
+    tmp = Path(tempfile.mkdtemp(prefix="clfont-repack-"))
+    try:
+        src = tmp / "a.asar"
+        src.write_bytes(fixture.build_asar({
+            "/.vite/build/mainView.js": fixture.PRELOAD,
+            "/.vite/build/index.pre.js": fixture.MAIN_JS,
+            "/.vite/renderer/main_window/index.html": fixture.INDEX,
+            "/dup.bin": fixture.INDEX,          # 与上一条同内容，测去重
+        }))
+        out = tmp / "b.asar"
+        r = subprocess.run([str(SWIFT_BIN), "_repack", "--in", str(src), "--out", str(out)],
+                           capture_output=True, text=True)
+        eq(r.returncode, 0, f"_repack 应成功：{r.stdout}{r.stderr}")
+        eq(out.read_bytes(), src.read_bytes(), "Swift 版重打包应逐字节一致")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 # ---------------------------------------------------------------- 入口
 
 def main():
