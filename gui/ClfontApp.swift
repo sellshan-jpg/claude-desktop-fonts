@@ -138,6 +138,21 @@ final class Copy: ObservableObject {
         "font.reset": "恢复 100%",
         "font.sample": "字A",
 
+        // —— 代码块
+        "code.group": "代码块",
+        "code.font": "代码字体",
+        "code.size": "代码字号",
+        "code.desc": "只影响代码块与行内代码，正文不受影响",
+        "code.keep": "保持不变",
+
+        // —— 外观
+        "look.group": "外观",
+        "look.bg": "页面底色",
+        "look.bg.desc": "把 Claude 的界面底色换成暖色。仅浅色模式生效，深色模式不受影响",
+        "look.bg.off": "不修改",
+        "look.bg.custom": "自定",
+        "header.lang": "Clfont 的界面语言",
+
         // —— 按钮
         "action.apply": "应用到{target}",
         "action.reapply": "重新应用到{target}",
@@ -308,6 +323,19 @@ final class Copy: ObservableObject {
         "font.reset": "Reset to 100%",
         "font.sample": "Aa字",
 
+        "code.group": "Code blocks",
+        "code.font": "Code font",
+        "code.size": "Code size",
+        "code.desc": "Affects code blocks and inline code only — body text is untouched",
+        "code.keep": "Leave unchanged",
+
+        "look.group": "Appearance",
+        "look.bg": "Page background",
+        "look.bg.desc": "Warm up Claude's background. Light mode only; dark mode is untouched",
+        "look.bg.off": "Unchanged",
+        "look.bg.custom": "Custom",
+        "header.lang": "Clfont's own interface language",
+
         "action.apply": "Apply to {target}",
         "action.reapply": "Re-apply to {target}",
         "action.doctor": "Diagnose",
@@ -432,6 +460,16 @@ func t(_ key: String, _ subs: [String: String]) -> String {
 // MARK: - 设计 tokens
 
 extension Color {
+    /// 转成 #RRGGBB。ColorPicker 给的是显示色域的颜色，先转 sRGB 再取分量，
+    /// 否则在广色域屏幕上取到的值会偏。
+    var hexString: String {
+        let ns = NSColor(self).usingColorSpace(.sRGB) ?? .white
+        return String(format: "#%02X%02X%02X",
+                      Int(ns.redComponent * 255 + 0.5),
+                      Int(ns.greenComponent * 255 + 0.5),
+                      Int(ns.blueComponent * 255 + 0.5))
+    }
+
     init(hex: UInt32) {
         self.init(.sRGB,
                   red: Double((hex >> 16) & 0xFF) / 255,
@@ -675,6 +713,19 @@ enum FontScanner {
                              "STKaiti", "STFangsong", "Yuanti SC"])
     }
 
+    /// 等宽字体。按 NSFont 的 fixedPitch 特征筛，比按名字猜可靠。
+    static func monoFamilies() -> [FontChoice] {
+        let mgr = NSFontManager.shared
+        let mono = Set(mgr.availableFontFamilies.filter { fam in
+            NSFont(name: fam, size: 12)?.fontDescriptor
+                .symbolicTraits.contains(.monoSpace) ?? false
+        })
+        return families(covering: ["A", "0"],
+                        preferred: ["SF Mono", "Menlo", "Monaco", "Courier New",
+                                    "JetBrains Mono", "Fira Code", "Source Code Pro"])
+            .filter { mono.contains($0.family) }
+    }
+
     static func latinFamilies() -> [FontChoice] {
         families(covering: ["A", "a", "0", "?"],
                  preferred: ["Helvetica Neue", "Avenir Next", "Georgia", "Palatino",
@@ -729,12 +780,18 @@ final class OutputBox: @unchecked Sendable {
     /// 不动 CSS 的 font-size，因此图标与整体布局都不受影响。
     @Published var fontScale = 100.0
     @Published var fontScaleLatin = 100.0
+    /// 代码块字体。空 = 不改，保持 Claude 原本的等宽字体。
+    @Published var fontMono = ""
+    @Published var fontMonoScale = 100.0
+    /// 页面底色。空 = 不改。形如 #F0EEE6，只在浅色模式生效。
+    @Published var bgColor = ""
     /// 上一次修改操作是否因缺少「App 管理」权限被系统拦下。
     /// 不做启动时的主动探测——那需要真的去写一次 Claude，会在用户还没提出
     /// 任何要求时就弹出系统授权请求。等到操作真的失败再提示，时机才对。
     @Published var appMgmtDenied = false
     @Published var fonts: [FontChoice] = []
     @Published var latinFonts: [FontChoice] = []
+    @Published var monoFonts: [FontChoice] = []
 
     /// 备份统计按目标缓存：切回来时立刻有内容，不必重新扫盘
     @Published var backupInfo: [Target: (summary: String, prunable: Int)] = [:]
@@ -789,6 +846,7 @@ final class OutputBox: @unchecked Sendable {
     func loadFonts() {
         fonts = FontScanner.cjkFamilies()
         latinFonts = FontScanner.latinFamilies()
+        monoFonts = FontScanner.monoFamilies()
         if !fonts.contains(where: { $0.family == fontFamily }), let f = fonts.first {
             fontFamily = f.family
         }
@@ -798,7 +856,7 @@ final class OutputBox: @unchecked Sendable {
     }
 
     func fontChoice(_ family: String) -> FontChoice? {
-        (fonts + latinFonts).first { $0.family == family }
+        (fonts + latinFonts + monoFonts).first { $0.family == family }
     }
 
     func loadConfig() {
@@ -810,6 +868,9 @@ final class OutputBox: @unchecked Sendable {
         mode = j["mode"] as? String ?? mode
         fontScale = (j["font_scale"] as? NSNumber)?.doubleValue ?? fontScale
         fontScaleLatin = (j["font_scale_latin"] as? NSNumber)?.doubleValue ?? fontScaleLatin
+        fontMono = j["font_mono"] as? String ?? fontMono
+        fontMonoScale = (j["font_mono_scale"] as? NSNumber)?.doubleValue ?? fontMonoScale
+        bgColor = j["bg_color"] as? String ?? bgColor
     }
 
     func saveConfig() {
@@ -824,6 +885,13 @@ final class OutputBox: @unchecked Sendable {
         j["mode"] = mode
         j["font_scale"] = Int(fontScale.rounded())
         j["font_scale_latin"] = Int(fontScaleLatin.rounded())
+        j["font_mono"] = fontMono
+        j["font_mono_scale"] = Int(fontMonoScale.rounded())
+        j["bg_color"] = bgColor
+        if let mo = fontChoice(fontMono)?.regular { j["font_mono_regular"] = mo }
+        else { j.removeValue(forKey: "font_mono_regular") }
+        if let mb = fontChoice(fontMono)?.bold { j["font_mono_bold"] = mb }
+        else { j.removeValue(forKey: "font_mono_bold") }
         if let r = c?.regular { j["font_regular"] = r } else { j.removeValue(forKey: "font_regular") }
         if let b = c?.bold { j["font_bold"] = b } else { j.removeValue(forKey: "font_bold") }
         if let r = l?.regular { j["font_latin_regular"] = r } else { j.removeValue(forKey: "font_latin_regular") }
@@ -991,7 +1059,10 @@ final class OutputBox: @unchecked Sendable {
         let tgt = target
         exec(["install", "-y", "--scope", scope, "--mode", mode,
               "--scale", String(Int(fontScale.rounded())),
-              "--scale-latin", String(Int(fontScaleLatin.rounded()))], on: tgt,
+              "--scale-latin", String(Int(fontScaleLatin.rounded())),
+              "--mono", fontMono,
+              "--mono-scale", String(Int(fontMonoScale.rounded())),
+              "--bg", bgColor], on: tgt,
              label: t("busy.install", ["{target}": tgt.label])) {
             [weak self] _, out in
             self?.noteAppMgmt(out)
@@ -1463,6 +1534,8 @@ struct ContentView: View {
             if let r = updates.available { updateNotice(r) }
             targetGroup
             fontGroup
+            codeGroup
+            lookGroup
             actions
             if busyNow { busyRow }
             logSection
@@ -1514,6 +1587,25 @@ struct ContentView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(DS.accent)
+
+                // 放在头部而不是设置区：设置区里的每一项都是「对 Claude 做的修改」，
+                // 界面语言只关乎 Clfont 自己，混在一起会被读成「把 Claude 汉化」。
+                Menu {
+                    Picker("", selection: $copy.lang) {
+                        Text(t("about.lang.auto")).tag(Lang.auto)
+                        Text("中文").tag(Lang.zh)
+                        Text("English").tag(Lang.en)
+                    }
+                    .pickerStyle(.inline).labelsHidden()
+                } label: {
+                    Image(systemName: "globe")
+                        .font(.system(size: 13, weight: .medium))
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .foregroundStyle(DS.accent)
+                .help(t("header.lang"))
 
                 Button { showHelp = true } label: {
                     HStack(spacing: 5) {
@@ -1742,6 +1834,106 @@ struct ContentView: View {
             .help(t("font.reset"))
         }
         .padding(.horizontal, 16).padding(.vertical, 11)
+    }
+
+    /// 代码块字体。走 CDS 的 mono token，只影响代码块与行内代码。
+    /// 「保持不变」= 空字符串，此时完全不注入相关规则。
+    private var codeGroup: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            GroupLabel(text: t("code.group"))
+            VStack(spacing: 0) {
+                HStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(t("code.font")).font(.system(size: 14))
+                        Text(t("code.desc"))
+                            .font(.system(size: 12)).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Picker("", selection: $m.fontMono) {
+                        Text(t("code.keep")).tag("")
+                        Divider()
+                        ForEach(m.monoFonts) { f in
+                            Text("\(fontRowTitle(f))   \(Text("Aa01").font(.custom(f.family, size: 14)))")
+                                .tag(f.family)
+                        }
+                    }
+                    .pickerStyle(.menu).labelsHidden().font(.system(size: 13))
+                    .frame(maxWidth: 260)
+                }
+                .padding(.horizontal, 16).padding(.vertical, 11)
+
+                if !m.fontMono.isEmpty {
+                    Divider().opacity(0.5).transition(.opacity)
+                    scaleRow(t("code.size"), $m.fontMonoScale)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            .glassEffect(.regular, in: DS.card)
+        }
+    }
+
+    /// 底色预设。#F0EEE6 是照旧版 Claude 的暖米色取的；另两个更淡，
+    /// 给觉得米黄太重的人。空字符串 = 不改。
+    private static let bgPresets: [(String, String)] = [
+        ("", "look.bg.off"), ("#F0EEE6", ""), ("#F7F4EC", ""), ("#F2F1EC", ""),
+    ]
+
+    private var lookGroup: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            GroupLabel(text: t("look.group"))
+            VStack(spacing: 0) {
+                HStack(alignment: .top, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(t("look.bg")).font(.system(size: 14))
+                        Text(t("look.bg.desc"))
+                            .font(.system(size: 12)).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 12)
+                    HStack(spacing: 8) {
+                        ForEach(Self.bgPresets, id: \.0) { hex, key in
+                            bgSwatch(hex, label: key.isEmpty ? nil : t(key))
+                        }
+                        ColorPicker("", selection: Binding(
+                            get: { Color(hex: UInt32(m.bgColor.dropFirst(), radix: 16) ?? 0xF0EEE6) },
+                            set: { m.bgColor = $0.hexString }))
+                            .labelsHidden()
+                            .help(t("look.bg.custom"))
+                    }
+                }
+                .padding(.horizontal, 16).padding(.vertical, 11)
+
+            }
+            .glassEffect(.regular, in: DS.card)
+        }
+    }
+
+    private func bgSwatch(_ hex: String, label: String?) -> some View {
+        let selected = m.bgColor.uppercased() == hex.uppercased()
+        return Button {
+            withAnimation(DS.ease) { m.bgColor = hex }
+        } label: {
+            ZStack {
+                if hex.isEmpty {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .strokeBorder(Color.secondary.opacity(0.4), lineWidth: 1)
+                    Image(systemName: "slash.circle")
+                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                } else {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(Color(hex: UInt32(hex.dropFirst(), radix: 16) ?? 0))
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .strokeBorder(Color.black.opacity(0.12), lineWidth: 1)
+                }
+                if selected {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .strokeBorder(DS.accent, lineWidth: 2)
+                }
+            }
+            .frame(width: 30, height: 26)
+        }
+        .buttonStyle(.plain)
+        .help(label ?? hex)
     }
 
     private var fontGroup: some View {
