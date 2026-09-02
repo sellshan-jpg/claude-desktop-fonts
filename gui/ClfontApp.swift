@@ -42,7 +42,7 @@ final class Copy: ObservableObject {
         "help.step6.title": "应用到正式 Claude",
         "help.step7.body": "安装依次执行：退出目标应用 → 创建完整备份 → 重新打包 → 更新完整性哈希 → 重新签名 → 启动验证。任一环节失败或中途取消，都会把文件恢复原样并重新验证签名，因此最坏的结果是「未能应用」，而非应用无法启动。\n需要注意的是，自动回滚不恢复 Claude 的原始签名；如需完全恢复，请执行「还原」。",
         "help.step7.title": "安装流程与失败处理",
-        "help.step8.body": "Claude 自动更新会覆盖已应用的修改。此时状态区域会提示此前的修改可能已被更新覆盖，重新执行一次安装即可。",
+        "help.step8.body": "Claude 自动更新会覆盖已应用的修改。程序检测到这一情况时，会在主界面给出提示并附带「重新应用」按钮，点击即可恢复，字体设置无需重新选择。",
         "help.step8.title": "Claude 更新后需重新应用",
         "help.step9.body": "如需撤销修改，使用「还原」；若能匹配到当前版本的完整备份，Anthropic 的原始签名会一并恢复。遇到异常时使用「自检」，程序会检查应用完整性、未完成事务、字体、磁盘空间、哈希与签名，结果记录在日志中。",
         "help.step9.title": "还原与自检",
@@ -52,6 +52,11 @@ final class Copy: ObservableObject {
         "toolchain.install": "安装命令行工具",
         "toolchain.recheck": "我已安装，重新检测",
         "toolchain.title": "需要先安装 Xcode 命令行工具",
+        "stale.action": "重新应用",
+        "stale.body": "Claude 的自动更新会重写应用内容，此前应用的字体随之失效。重新应用一次即可恢复，设置无需重新选择。",
+        "stale.title": "Claude 已更新，此前应用的字体已失效",
+        "helper.body": "早期版本的 Clfont 在重新签名时会一并清除 Claude 内部组件的系统权限，导致 Cowork、虚拟机等功能不可用。重新应用一次，程序会从完整备份还原后再进行修改；若没有可用备份，请重新下载安装 Claude。",
+        "helper.title": "检测到早期版本遗留的权限缺失",
     ]
 
     static var fileURL: URL {
@@ -139,6 +144,40 @@ private struct GroupLabel: View {
     }
 }
 
+/// 提示条：圆形图标 + 标题 + 说明 + 可选操作。用于那些「不看见就会误解」的
+/// 状态：缺命令行工具、Claude 更新后修改失效、早期版本遗留的权限缺失。
+private struct NoticeCard<Actions: View>: View {
+    let tint: Color
+    let symbol: String
+    let title: String
+    let message: String
+    @ViewBuilder var actions: Actions
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            ZStack {
+                Circle().fill(tint.opacity(0.16)).frame(width: 22, height: 22)
+                Image(systemName: symbol)
+                    .font(.system(size: 11, weight: .bold)).foregroundStyle(tint)
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title).font(.system(size: 14, weight: .semibold))
+                Text(message)
+                    .font(.system(size: 12.5)).foregroundStyle(.secondary)
+                    .lineSpacing(2.5)
+                    .fixedSize(horizontal: false, vertical: true)
+                actions
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(tint.opacity(0.08)))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .strokeBorder(tint.opacity(0.22), lineWidth: 1))
+    }
+}
+
 // MARK: - 更新说明
 
 /// 面向用户的更新说明：只说「改了什么」和「你要做什么」，不堆术语。
@@ -151,6 +190,15 @@ struct ReleaseNote: Identifiable {
 }
 
 let releaseNotes: [ReleaseNote] = [
+    ReleaseNote(
+        version: "5.2",
+        changes: [
+            "修复应用字体后 Claude 的 Cowork、虚拟机等功能不可用的问题。此前重新签名时会一并清除 Claude 内部组件的系统权限，现已完整保留。",
+            "对早期版本造成的上述权限缺失，程序会在检测到时提示，并在下次「应用」时从完整备份自动修复。",
+            "Claude 自动更新覆盖已应用的字体时，主界面会直接给出提示与重新应用入口，不必自行察觉。",
+            "修正测试 Claude 与正式 Claude 共用一份应用记录的问题，两者的状态现已分别记录。",
+        ],
+        action: "若此前已为 Claude 应用过字体，建议重新执行一次「应用」，以恢复被早期版本清除的系统权限。"),
     ReleaseNote(
         version: "5.1",
         changes: [
@@ -225,6 +273,10 @@ struct AppStatus {
     var version = "—"
     var signOK = true
     var integrityOK = true
+    /// Claude 自己更新过，此前应用的字体被覆盖掉了，需要重新应用一次
+    var stale = false
+    /// 嵌套 Helper 的权限是否完整（旧版重签名会把它抹掉，Cowork 等功能会失效）
+    var helperOK = true
     var backups: [String] = []
     var font = ""
     var checkedAt = ""
@@ -466,6 +518,9 @@ final class OutputBox: @unchecked Sendable {
             s.patched = out.contains("已打补丁")
             s.signOK = !out.contains("codesign -v：未通过")
             s.integrityOK = !out.contains("asar 完整性哈希：不匹配")
+            // 这两个标记由 CLI 的 status 输出，改措辞要两边一起改
+            s.stale = out.contains("补丁已失效")
+            s.helperOK = !out.contains("Helper 权限：缺失")
             if let r = out.range(of: "Claude 版本：") {
                 s.version = String(out[r.upperBound...].prefix { !$0.isNewline })
                     .trimmingCharacters(in: .whitespaces)
@@ -948,36 +1003,39 @@ struct ContentView: View {
 
     /// 没有命令行工具时，任何修改都执行不了——直接挡在最前面，并给一键安装入口。
     private var toolchainNotice: some View {
-        HStack(alignment: .top, spacing: 12) {
-            ZStack {
-                Circle().fill(DS.prod.opacity(0.16)).frame(width: 22, height: 22)
-                Image(systemName: "exclamationmark")
-                    .font(.system(size: 11, weight: .bold)).foregroundStyle(DS.prod)
+        NoticeCard(tint: DS.prod, symbol: "exclamationmark",
+                   title: t("toolchain.title"), message: t("toolchain.body")) {
+            HStack(spacing: 10) {
+                Button(t("toolchain.install")) { Toolchain.requestInstall() }
+                    .buttonStyle(.glassProminent).tint(DS.prod)
+                    .buttonBorderShape(.capsule)
+                Button(t("toolchain.recheck")) { m.checkTools() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12)).foregroundStyle(DS.accent)
             }
-            VStack(alignment: .leading, spacing: 6) {
-                Text(t("toolchain.title"))
-                    .font(.system(size: 14, weight: .semibold))
-                Text(t("toolchain.body"))
-                    .font(.system(size: 12.5)).foregroundStyle(.secondary)
-                    .lineSpacing(2.5)
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 10) {
-                    Button(t("toolchain.install")) { Toolchain.requestInstall() }
-                        .buttonStyle(.glassProminent).tint(DS.prod)
-                        .buttonBorderShape(.capsule)
-                    Button(t("toolchain.recheck")) { m.checkTools() }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 12)).foregroundStyle(DS.accent)
-                }
-                .padding(.top, 2)
-            }
+            .padding(.top, 2)
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(DS.prod.opacity(0.08)))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .strokeBorder(DS.prod.opacity(0.22), lineWidth: 1))
+    }
+
+    /// Claude 的自动更新会重写 app.asar，此前应用的字体随之消失。用户看到的
+    /// 只是「字体自己变回去了」，不主动说明的话，多半会以为是本软件出了问题。
+    private var staleNotice: some View {
+        NoticeCard(tint: DS.prod, symbol: "arrow.clockwise",
+                   title: t("stale.title"), message: t("stale.body")) {
+            Button(t("stale.action")) { m.install() }
+                .buttonStyle(.glassProminent).tint(DS.prod)
+                .buttonBorderShape(.capsule)
+                .disabled(busyNow || !toolsOK)
+                .padding(.top, 2)
+        }
+    }
+
+    /// 早期版本重签名时用了 codesign --deep，把 Claude 内部组件的 entitlements
+    /// 一并抹掉，Cowork、虚拟机等功能会静默失效。这种损伤无法就地修补，只能
+    /// 从完整备份还原——「应用」时会自动处理，这里只负责让用户知道发生了什么。
+    private var helperNotice: some View {
+        NoticeCard(tint: DS.danger, symbol: "exclamationmark",
+                   title: t("helper.title"), message: t("helper.body")) { EmptyView() }
     }
 
     private var content: some View {
@@ -985,6 +1043,10 @@ struct ContentView: View {
             appHeader
             if !toolsOK { toolchainNotice }
             statusCard
+            if m.current.loaded && !m.current.missing {
+                if m.current.stale { staleNotice }
+                if !m.current.helperOK { helperNotice }
+            }
             targetGroup
             fontGroup
             actions
@@ -1136,6 +1198,7 @@ struct ContentView: View {
         if s.missing { return "找不到这个 Claude" }
         if !s.loaded { return "读取中…" }
         if s.patched { return "已应用 " + (s.font.isEmpty ? "字体" : s.font) }
+        if s.stale { return "字体当前未生效" }     // 具体原因由下方提示条说明
         return "尚未应用，随时可以撤回"
     }
 

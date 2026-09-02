@@ -135,12 +135,9 @@ runtime，并声明了一组 entitlements。由于修改 `app.asar` 后必须重
 无法获得 Anthropic 的签名证书，只能采用 ad-hoc 签名。由此产生以下影响：
 
 - **`keychain-access-groups` 权限丢失。** 该权限包含 WebAuthn 通行密钥及
-  Microsoft workplace join 相关的钥匙串访问组。使用通行密钥或 Microsoft / Entra
-  SSO 登录 Claude 的用户可能无法完成身份验证。
-- **Cowork（本地虚拟机）无法启动。** 该功能要求应用具备
-  `com.apple.security.virtualization` entitlement，重新签名后该条目丢失，界面会
-  提示「Claude's installation appears to be invalid or has been modified」。执行
-  「还原」恢复原始签名后即可恢复正常。
+  Microsoft workplace join 相关的钥匙串访问组。该条目与开发者身份绑定，ad-hoc
+  签名下无法保留。使用通行密钥或 Microsoft / Entra SSO 登录 Claude 的用户可能
+  无法完成身份验证。
 - **hardened runtime 被关闭。** 应用的安全防护等级随之降低。
 - **TCC 权限记录失效。** 系统按代码签名身份记录隐私权限，签名变更后，麦克风、
   通知等权限需要重新授权。
@@ -148,9 +145,17 @@ runtime，并声明了一组 entitlements。由于修改 `app.asar` 后必须重
   「Claude Safe Storage」。该弹窗可能连续出现多次（实测最多 4 次），每次输入登录
   密码并选择「始终允许」即可，属预期行为。
 
-需要说明的是，`com.apple.security.device.camera` 等条目属于 App Sandbox
-entitlements。Claude 未启用沙盒，因此摄像头与麦克风的可用性不受这些条目影响，
-实际影响以上述四项为准。
+其余 entitlements 会被完整保留。修改只涉及 `Contents/Resources/app.asar` 与
+`Contents/Info.plist`，二者均由顶层签名封存，Claude 内部各组件（Helper、
+Framework）的签名并未被破坏，因此重新签名只作用于顶层 bundle；顶层则在首次修改
+前记录原版 entitlements，并在此后每次签名时一并写回。`com.apple.security.virtualization`
+（Cowork 与本地虚拟机所需）等条目由此得以保留。
+
+> **5.2 之前的版本**在重新签名时使用了 `codesign --deep`，会连同 Claude 内部各
+> 组件一起重签，其 entitlements 被全部清除，Cowork 与虚拟机功能因此不可用。若你
+> 使用过这些版本，升级后程序会检测到该情况并在界面中提示，执行一次「应用」即会
+> 先从完整备份还原、再进行修改，权限随之恢复；若没有可用备份，需从
+> <https://claude.ai/download> 重新下载安装 Claude。
 
 ### 恢复原始签名
 
@@ -159,7 +164,7 @@ Clfont 在首次修改前会创建完整应用备份，保存于
 
 恢复原始签名只有「还原」这一条路径。安装过程中的自动回滚不走备份，它只把文件改
 回修改前的内容再重新签名，签名仍为 ad-hoc。因此若安装失败后需要让 Claude 回到
-完全未经改动的状态（例如需要使用 Cowork），请再执行一次「还原」。
+完全未经改动的状态，请再执行一次「还原」。
 
 执行「还原」时，若能匹配到当前版本对应的备份，程序将直接从备份恢复整个应用包，
 **Anthropic 的原始签名、hardened runtime 及全部 entitlements 会一并恢复**。还原
@@ -183,8 +188,8 @@ Clfont 在首次修改前会创建完整应用备份，保存于
 
 ## 已知限制
 
-- **Claude 自动更新会覆盖已应用的修改。** 更新完成后重新执行一次「应用」即可。
-  状态区域会提示此前的修改可能已被更新覆盖。
+- **Claude 自动更新会覆盖已应用的修改。** 程序检测到这一情况时，会在主界面给出
+  提示并附带「重新应用」按钮，点击即可恢复，字体设置无需重新选择。
 - **实现依赖 Claude 当前的构建细节。** 字体族名称 `anthropic-sans` 与
   `anthropic-serif` 来自远程 `claude.ai`；打包路径 `.vite/build/mainView.js`、
   `ElectronAsarIntegrity` 机制及 Electron fuse 配置来自当前桌面版构建。上述任一

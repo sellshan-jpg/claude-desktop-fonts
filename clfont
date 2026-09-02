@@ -129,7 +129,7 @@ def manual_restore_text():
 _,_,_,jl=struct.unpack('<IIII',f.read(16));print(hashlib.sha256(f.read(jl)).hexdigest())")
     /usr/libexec/PlistBuddy -c "Set :ElectronAsarIntegrity:Resources/app.asar:hash $H" \\
       "{INFO_PLIST}"
-    codesign --force --deep --sign - "{APP}\""""
+    codesign --force --sign - "{APP}\""""
 
 
 # ---------------------------------------------------------------- 日志与输出
@@ -323,6 +323,42 @@ def load_config():
 def save_config(cfg):
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     CONFIG_PATH.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n")
+
+
+# 「上次打补丁的记录」必须按目标分开存：配置文件只有一份，正式版和测试副本
+# 共用。旧版把它记在 cfg["last_install"] 里，给测试副本打一次补丁就会覆盖掉
+# 正式版的记录，「Claude 更新后补丁失效」的提醒也就跟着失灵。
+
+def _target_key():
+    return target_slug() or "default"
+
+
+def last_install_get(cfg):
+    per = cfg.get("last_install_targets")
+    if isinstance(per, dict) and _target_key() in per:
+        return per[_target_key()] or {}
+    legacy = cfg.get("last_install")     # 旧版本留下的单份记录，只算默认目标的
+    if isinstance(legacy, dict) and not target_slug():
+        return legacy
+    return {}
+
+
+def last_install_set(cfg, rec):
+    per = cfg.get("last_install_targets")
+    cfg["last_install_targets"] = {**(per if isinstance(per, dict) else {}),
+                                   _target_key(): rec}
+    cfg.pop("last_install", None)
+
+
+def last_install_clear(cfg):
+    per = cfg.get("last_install_targets")
+    changed = False
+    if isinstance(per, dict) and per.pop(_target_key(), None) is not None:
+        cfg["last_install_targets"] = per
+        changed = True
+    if not target_slug() and cfg.pop("last_install", None) is not None:
+        changed = True
+    return changed
 
 
 # ---------------------------------------------------------------- 基础探查
@@ -816,6 +852,81 @@ def is_adhoc_signed():
     return "adhoc" in ((r.stderr or "") + (r.stdout or ""))
 
 
+# ----------------------------------------------- entitlements
+
+# 与开发者身份绑定的 entitlement。ad-hoc 签名既没有 team 也没有描述文件，
+# 这些项留着不会生效，反而可能让 AMFI 连整份 entitlement 一起拒掉。
+ENT_DROP = {"com.apple.application-identifier", "keychain-access-groups"}
+ENT_DROP_PREFIX = ("com.apple.developer.",)
+
+HELPER_REL = "Contents/Frameworks/Claude Helper.app"
+
+
+def read_entitlements(app_path):
+    """读某个 .app 的 entitlements；读不到、为空、解析失败一律返回 None。"""
+    r = subprocess.run(
+        ["codesign", "-d", "--entitlements", "-", "--xml", str(app_path)],
+        capture_output=True)
+    if r.returncode != 0 or not (r.stdout or b"").strip():
+        return None
+    try:
+        d = plistlib.loads(r.stdout)
+    except Exception:
+        return None
+    return d if isinstance(d, dict) and d else None
+
+
+def entitlements_path(version):
+    return DATA_DIR / f"entitlements-{version}{target_slug()}.plist"
+
+
+def capture_entitlements():
+    """把原版 app 的 entitlements 缓存下来，供之后每次重签名带回去。
+
+    必须赶在第一次改签名之前取——ad-hoc 一旦覆盖上去，原件就没了。
+    已经被旧版 clfont 签成 ad-hoc 的机器，退而从整包备份里取。
+    返回缓存文件路径；取不到返回 None。"""
+    version = claude_version()
+    if not version:
+        return None
+    dst = entitlements_path(version)
+    if dst.exists():
+        return dst
+    src = APP if not is_adhoc_signed() else pristine_backup_for_current()
+    ent = read_entitlements(src) if src else None
+    if not ent:
+        return None
+    kept = {k: v for k, v in ent.items()
+            if k not in ENT_DROP and not k.startswith(ENT_DROP_PREFIX)}
+    dropped = sorted(set(ent) - set(kept))
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    dst.write_bytes(plistlib.dumps(kept))
+    ok(f"已记录原版 entitlements（保留 {len(kept)} 项）：{dst.name}")
+    if dropped:
+        info("剔除与开发者身份绑定、ad-hoc 下无法生效的项：" + "、".join(dropped))
+    return dst
+
+
+def entitlements_for_resign():
+    version = claude_version()
+    if not version:
+        return None
+    p = entitlements_path(version)
+    return p if p.exists() else capture_entitlements()
+
+
+def nested_entitlements_stripped():
+    """判断嵌套 Helper 的 entitlements 是否被抹掉过。
+
+    v5.1 之前重签名用的是 codesign --deep，它会把每个 Helper 也重签成不带任何
+    entitlement 的 ad-hoc。Claude Helper 因此丢掉 com.apple.security.virtualization
+    等权限，Cowork/虚拟机功能失效。这种损伤无法就地补回，只能整包还原。"""
+    helper = APP / HELPER_REL
+    if not helper.exists():
+        return False
+    return read_entitlements(helper) is None
+
+
 def pristine_backup_for_current():
     """当前已安装版本对应的整包备份（打补丁前留的原版，签名是 Anthropic 的）。"""
     v = claude_version()
@@ -831,9 +942,25 @@ def sign_valid():
 
 
 def resign():
-    info("重签名整个 app（整包较大，可能需要 1–2 分钟，请耐心等待；"
-         "此阶段中断也会触发自动回滚）…")
-    run_cmd(["codesign", "--force", "--deep", "--sign", "-", str(APP)])
+    """只重签顶层 bundle，并带回原版 entitlements。
+
+    我们改的只有 Contents/Resources/app.asar 和 Contents/Info.plist，两者都由
+    顶层签名封存，嵌套的 Helper / Framework 签名一个都没被破坏——所以不需要
+    --deep。旧版用了 --deep，顺手把每个 Helper 重签成不带 entitlement 的
+    ad-hoc，Claude Helper 丢掉 com.apple.security.virtualization，Cowork 与
+    虚拟机功能随之失效。去掉 --deep 后 Helper 保持 Anthropic 原签名。
+
+    也不加 --options runtime：顶层是 ad-hoc（无 team），而各 Framework 仍由
+    Anthropic 签名；开启 hardened runtime 会一并打开库校验，团队不匹配将导致
+    Electron Framework 加载失败。"""
+    ent = entitlements_for_resign()
+    info("重签名顶层 bundle（" +
+         ("保留原版 entitlements" if ent else "未取到原版 entitlements，将不带") +
+         "，整包较大需要一会儿；此阶段中断也会触发自动回滚）…")
+    cmd = ["codesign", "--force", "--sign", "-"]
+    if ent:
+        cmd += ["--entitlements", str(ent)]
+    run_cmd(cmd + [str(APP)])
     if not sign_valid():
         raise RuntimeError("codesign -v 验证未通过")
     ok("签名验证通过")
@@ -1157,6 +1284,28 @@ def check_prev_txn():
         info(f"详细日志：{j['log']}")
 
 
+def heal_nested_signatures(assume_yes):
+    """修复旧版 --deep 重签留下的损伤。
+
+    Helper 的 entitlements 被抹掉后无法就地补回（补回去也签不出 Anthropic 的
+    身份），唯一的办法是拿打补丁前的整包备份整体还原。备份自身也得是完好的，
+    否则还原过去等于原地踏步。"""
+    if not nested_entitlements_stripped():
+        return
+    bak = pristine_backup_for_current()
+    if bak and read_entitlements(bak / HELPER_REL):
+        step("修复旧版重签名留下的损伤（Helper 丢失 entitlements，"
+             "会导致 Cowork、虚拟机等功能不可用）")
+        info("这类损伤无法就地修补，需要从整包备份整体还原后再打补丁。")
+        restore_from_backup(assume_yes, src=bak)
+        ok("已还原到原版签名，继续打补丁")
+    else:
+        bad("检测到 Helper 缺少 entitlements（旧版重签名的后果），"
+            "Cowork、虚拟机等功能可能不可用。")
+        info("没有可用于修复的原版备份。如需彻底修复，"
+             "请到 https://claude.ai/download 重新下载安装 Claude 后再运行本工具。")
+
+
 def cmd_install(args):
     print(f"clfont install（目标：{APP}）")
     cfg = load_config()
@@ -1182,6 +1331,9 @@ def cmd_install(args):
         die("app.asar 与 app.asar.bak 均不存在，应用结构异常，中止。")
     if not quit_claude(args.yes):
         die("Claude 仍在运行", 2)
+
+    heal_nested_signatures(args.yes)
+    capture_entitlements()
 
     txn = Txn("install")
     try:
@@ -1243,8 +1395,8 @@ def cmd_install(args):
         txn.mark("冒烟测试通过")
 
         txn.commit()
-        cfg["last_install"] = {"version": version, "mode": mode,
-                               "time": time.strftime("%F %T")}
+        last_install_set(cfg, {"version": version, "mode": mode,
+                               "time": time.strftime("%F %T")})
         save_config(cfg)
 
         print(f"\n✓ 完成。注入方式：{mode}，替换范围：{cfg.get('scope', 'cjk')}，"
@@ -1285,8 +1437,8 @@ def cmd_uninstall(args):
     if not quit_claude(args.yes):
         die("Claude 仍在运行", 2)
     # 光把 asar 还原回去是不够的：重签只能签成 ad-hoc，Anthropic 的开发者签名、
-    # hardened runtime 和 entitlements（含 keychain-access-groups）都回不来。
-    # 整包备份里躺着的才是原封不动的原版，能还原就优先用它。
+    # hardened runtime 和身份相关的 entitlement（keychain-access-groups 等）
+    # 都回不来。整包备份里躺着的才是原封不动的原版，能还原就优先用它。
     backup = pristine_backup_for_current()
     adhoc = is_adhoc_signed()
     try:
@@ -1307,6 +1459,10 @@ def cmd_uninstall(args):
             step("还原")
             restore_pristine()
         journal_clear()
+        # 主动还原后就不该再提醒「补丁失效，去重新应用」了
+        cfg = load_config()
+        if last_install_clear(cfg):
+            save_config(cfg)
         team = signing_team()
         if team:
             print(f"\n✓ 已完全还原，且恢复了原始签名（TeamIdentifier={team}）。")
@@ -1336,23 +1492,30 @@ def cmd_status(_args):
     check_prev_txn()
 
     patched = is_patched()
-    last = cfg.get("last_install") or {}
+    last = last_install_get(cfg)
     if patched:
         desc = f"（{last.get('mode', '?')} 模式，{last.get('time', '?')}）" if last else ""
         ok(f"已打补丁 {desc}")
-        if last.get("version") and last["version"] != version:
-            bad(f"Claude 已从 {last['version']} 更新到 {version}，"
-                "补丁可能已失效，建议重跑 clfont install")
     else:
-        info("未打补丁" +
-             ("（上次曾对 %s 打过，可能被更新覆盖）" % last["version"]
-              if last.get("version") else ""))
+        info("未打补丁")
+    # 上次打补丁时的 Claude 版本与现在对不上 = Claude 自己更新过，补丁随
+    # app.asar 一起被覆盖掉了。主动还原（uninstall）会清掉 last_install，
+    # 所以不会在这里误报。
+    # 这一行是 GUI 判断「需要提醒用户重新应用」的依据，措辞改动需同步 GUI。
+    if last.get("version") and last["version"] != version:
+        bad(f"补丁已失效：Claude 已更新到 {version}"
+            f"（上次应用于 {last['version']}），需要重新应用一次")
     info(f"app.asar：{'存在' if ASAR.exists() else '不存在'}"
          f"，app.asar.bak（原版留底）：{'存在' if ASAR_BAK.exists() else '不存在'}")
     if ASAR.exists():
         want, got = asar_header_hash(ASAR), plist_get_asar_hash()
         info(f"asar 完整性哈希：{'匹配' if want == got else '不匹配！app 将无法启动'}")
     info(f"codesign -v：{'通过' if sign_valid() else '未通过！'}")
+    if nested_entitlements_stripped():
+        bad("Helper 权限：缺失（旧版重签名的后果，Cowork/虚拟机等功能可能不可用；"
+            "重新应用一次即会自动修复）")
+    else:
+        info("Helper 权限：完整")
 
     backups = list_backups()
     info("整包备份：" + ("、".join(b.name for b in backups) if backups else "无"))
@@ -1426,6 +1589,15 @@ def cmd_doctor(_args):
             bad("签名身份：ad-hoc（已被 clfont 重签），且没有当前版本的整包备份，"
                 "原始签名无法还原——需要重新下载安装 Claude 才能恢复")
             problems += 1
+        if nested_entitlements_stripped():
+            bad("Helper 权限：已被旧版重签名抹掉（Cowork、虚拟机等功能会不可用）")
+            if pristine_backup_for_current():
+                info("下次 clfont install 会自动从整包备份还原并修复")
+            else:
+                info("没有可用备份，需重新下载安装 Claude 才能修复")
+            problems += 1
+        else:
+            ok("Helper 权限：完整")
     if CANON.exists():
         ok(f"工具固定位置已安装：{CANON}")
     else:

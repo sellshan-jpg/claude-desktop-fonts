@@ -37,7 +37,23 @@ echo "  CFBundleURLTypes   → 已删除（不再抢 claude:// 回调）"
 echo "  CFBundleName       → 保持 Claude（钥匙串 Safe Storage 依赖它）"
 
 echo "▸ 重新签名"
-codesign --force --deep --sign - "$DST" >/dev/null 2>&1
+# 只改了 Info.plist，破坏的只有顶层封签，嵌套 Helper / Framework 的签名完好，
+# 所以不用 --deep——用了反而会把 Helper 的 entitlements 一并抹掉，副本上的
+# Cowork、虚拟机等功能会失效，测出来的行为就不再代表正式版了。
+# 顶层的 entitlements 照搬原版，只去掉与开发者身份绑定、ad-hoc 下无法生效的项。
+ENT="$(mktemp -t clfont-ent)"
+if codesign -d --entitlements "$ENT" --xml "$SRC" 2>/dev/null && [ -s "$ENT" ]; then
+  for k in com.apple.application-identifier \
+           com.apple.developer.team-identifier keychain-access-groups; do
+    /usr/libexec/PlistBuddy -c "Delete :$k" "$ENT" >/dev/null 2>&1 || true
+  done
+  codesign --force --sign - --entitlements "$ENT" "$DST" >/dev/null 2>&1
+  echo "  已保留原版 entitlements（去掉身份绑定项）"
+else
+  codesign --force --sign - "$DST" >/dev/null 2>&1
+  echo "  未能读取原版 entitlements，本次不带"
+fi
+rm -f "$ENT"
 codesign -v "$DST" && echo "  ✓ 签名有效"
 
 echo "▸ 播种登录态（只拷认证相关文件，约 10MB，不碰 10G 的 vm_bundles）"
