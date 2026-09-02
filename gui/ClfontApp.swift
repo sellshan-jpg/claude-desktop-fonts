@@ -219,12 +219,13 @@ final class Copy: ObservableObject {
         "item.mono": "代码块字体",
         "item.bg": "页面底色",
 
+        "sheet.applying.keychain": "过程中会启动一次 Claude 以验证补丁可用。系统此时可能请求访问钥匙串项「Claude Safe Storage」，请输入 Mac 的登录密码（即解锁屏幕所用的密码）并选择「始终允许」，登录状态方可保留。该请求可能连续出现数次，每次处理方式相同。",
         "sheet.applying.title": "正在应用中",
         "sheet.applying.hint": "此窗口会在完成后自动关闭，期间请勿关闭应用。",
 
-        "sheet.restart.title": "即将重新启动 Claude",
-        "sheet.restart.body": "重新签名后首次启动时，系统会请求访问钥匙串项「Claude Safe Storage」。请输入 Mac 的登录密码（即解锁屏幕所用的密码）并选择「始终允许」，登录状态方可保留。该请求可能连续出现数次，每次处理方式相同。",
-        "sheet.restart.manual": "若未自动启动，请点击下方按钮。",
+        "sheet.restart.title": "应用完成",
+        "sheet.restart.body": "Claude 已重新启动。若钥匙串请求仍在弹出，请输入 Mac 的登录密码并选择「始终允许」。",
+        "sheet.restart.manual": "若 Claude 未自动启动，请点击下方按钮。",
         "sheet.restart.launch": "启动 Claude",
         "sheet.cancel": "取消",
         "sheet.close": "关闭",
@@ -441,12 +442,13 @@ final class Copy: ObservableObject {
         "item.mono": "the code block font",
         "item.bg": "the page background",
 
+        "sheet.applying.keychain": "Claude is launched once along the way, to check the patch actually works. macOS may ask for the \"Claude Safe Storage\" keychain item at that point: enter your Mac login password, the one that unlocks the screen, and choose Always Allow so your session carries over. It may ask several times over; answer it the same way each time.",
         "sheet.applying.title": "Applying",
         "sheet.applying.hint": "This window closes on its own when the work is done. Leave the app running.",
 
-        "sheet.restart.title": "Claude is about to restart",
-        "sheet.restart.body": "Re-signing means the first launch asks for the \"Claude Safe Storage\" keychain item. Enter your Mac login password — the one that unlocks the screen — and choose Always Allow, so your session carries over. It may ask several times over; answer it the same way each time.",
-        "sheet.restart.manual": "If it does not start on its own, use the button below.",
+        "sheet.restart.title": "Done",
+        "sheet.restart.body": "Claude has been restarted. If the keychain prompt is still showing, enter your Mac login password and choose Always Allow.",
+        "sheet.restart.manual": "If Claude did not start on its own, use the button below.",
         "sheet.restart.launch": "Launch Claude",
         "sheet.cancel": "Cancel",
         "sheet.close": "Close",
@@ -2733,6 +2735,14 @@ struct ContentView: View {
                     .onChange(of: m.log) { _, _ in scrollToTail(sp) }
                 }
 
+                // 钥匙串请求由安装过程中的冒烟测试触发（那一步会真的启动一次
+                // Claude），发生在「应用完成」之前。说明必须此刻就在屏幕上，
+                // 放到完成弹窗里就晚了。
+                Text(t("sheet.applying.keychain"))
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+                    .lineSpacing(2.5)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 Text(t("sheet.applying.hint"))
                     .font(.system(size: 11.5)).foregroundStyle(.tertiary)
             }
@@ -2753,8 +2763,8 @@ struct ContentView: View {
                 HStack(alignment: .top, spacing: 13) {
                     ZStack {
                         Circle().fill(DS.success.opacity(0.16)).frame(width: 34, height: 34)
-                        Image(systemName: "key")
-                            .font(.system(size: 15, weight: .medium)).foregroundStyle(DS.success)
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 15, weight: .bold)).foregroundStyle(DS.success)
                     }
                     VStack(alignment: .leading, spacing: 5) {
                         Text(t("sheet.restart.title"))
