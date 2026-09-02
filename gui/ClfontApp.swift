@@ -2738,10 +2738,25 @@ struct ContentView: View {
                 // 钥匙串请求由安装过程中的冒烟测试触发（那一步会真的启动一次
                 // Claude），发生在「应用完成」之前。说明必须此刻就在屏幕上，
                 // 放到完成弹窗里就晚了。
-                Text(t("sheet.applying.keychain"))
-                    .font(.system(size: 12)).foregroundStyle(.secondary)
-                    .lineSpacing(2.5)
-                    .fixedSize(horizontal: false, vertical: true)
+                // 铺一层红底：这是整个流程里唯一需要用户动手的地方，而它出现时
+                // 系统弹窗已经盖在上面了，不做视觉区分就会被当成普通说明划过去。
+                HStack(alignment: .top, spacing: 9) {
+                    Image(systemName: "key.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(DS.danger)
+                        .padding(.top, 1)
+                    Text(t("sheet.applying.keychain"))
+                        .font(.system(size: 12))
+                        .foregroundStyle(.primary.opacity(0.78))
+                        .lineSpacing(2.5)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(DS.danger.opacity(0.09)))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(DS.danger.opacity(0.22), lineWidth: 1))
 
                 Text(t("sheet.applying.hint"))
                     .font(.system(size: 11.5)).foregroundStyle(.tertiary)
