@@ -46,30 +46,44 @@ final class Copy: ObservableObject {
         "footer.ops": "安装会先退出该 Claude，全程有完整备份；失败或中途取消都会把文件恢复原样，随时可用「还原」完全撤销。重签名后首次启动可能要求重新授权钥匙串，属正常现象。",
         "footer.safety": "Clfont 仅在本机修改 Claude 的字体渲染：注入内容只有字体规则，不改动任何网络请求，也不读取账号信息与聊天记录。",
         "header.subtitle": "使用 Clfont，在 Claude 里安全地使用你喜欢的中英文字体",
-        "help.footer": "本工具仅修改所选的 Claude 应用包，不读取账号与会话数据。",
-        "help.safety.b1": "注入内容仅有字体规则（CSS @font-face），不改动任何网络请求，不伪造客户端身份，也不绕过任何限制或配额。",
-        "help.safety.b2": "不读取、不上传账号信息与聊天记录，全部操作都在本机完成。",
-        "help.safety.b3": "安装前会创建完整备份，任一环节失败或中途取消都会把文件恢复原样，随时可用「还原」完全撤销。",
-        "help.safety.title": "关于安全性",
-        "help.step1.body": "修改 Claude 的应用包需要「App 管理」权限，macOS 会在第一次执行安装时弹出系统请求，请选择「允许」。若此前误选了「不允许」，请前往「系统设置 → 隐私与安全性 → App 管理」，为 Clfont 打开开关后重新执行。\n除此之外不需要任何额外组件：本工具不依赖 Xcode 命令行工具，也不需要「辅助功能」权限。",
-        "help.step1.title": "首次使用：「App 管理」权限",
-        "help.step2.body": "应用修改需要对 Claude 重新签名，正式版的原始签名会因此被替换。为避免对日常使用的应用反复改动，建议每次更换字体时先在测试 Claude 上确认效果。测试 Claude 是正式版的完整副本，使用独立的应用标识与配置目录，与正式版互不影响。",
-        "help.step2.title": "建议先在测试 Claude 上验证",
-        "help.step3.body": "「替换范围」决定替换哪种文字。「中文」只改中文字形，界面图标不受影响，也是推荐选项；「英文」与「中英文」会一并改变界面英文的观感，若之后发现个别图标显示异常，请改回「中文」。选定范围后在下方选择对应字体，预览会立即更新。",
-        "help.step3.title": "选择替换范围与字体",
-        "help.step4.body": "确认「测试 Claude」处于选中状态后执行安装，过程约 1 至 2 分钟，期间请勿关闭窗口。",
-        "help.step4.title": "应用到测试 Claude",
-        "help.step5.body": "首次启动时，系统会请求访问钥匙串「Claude Safe Storage」。请输入 Mac 的登录密码（即锁屏密码）并选择「始终允许」。该弹窗可能连续出现多次（实测最多 4 次），每次操作相同，属正常现象；全部允许后，副本会沿用现有登录状态自动进入。\n副本可能显示「为了安全，请重新登录」的提示条，可忽略，无需处理。请仅用它确认字体效果，日常使用仍以正式 Claude 为准。",
-        "help.step5.title": "启动测试 Claude，确认字体效果",
-        "help.step6.body": "效果确认无误后，切换回「正式 Claude」卡片，再次执行安装。",
-        "help.step6.title": "应用到正式 Claude",
-        "help.step7.body": "安装依次执行：退出目标应用 → 创建完整备份 → 重新打包 → 更新完整性哈希 → 重新签名 → 启动验证。任一环节失败或中途取消，都会把文件恢复原样并重新验证签名，因此最坏的结果是「未能应用」，而非应用无法启动。\n需要注意的是，自动回滚不恢复 Claude 的原始签名；如需完全恢复，请执行「还原」。",
-        "help.step7.title": "安装流程与失败处理",
-        "help.step8.body": "Claude 自动更新会覆盖已应用的修改。程序检测到这一情况时，会在主界面给出提示并附带「重新应用」按钮，点击即可恢复，字体设置无需重新选择。",
-        "help.step8.title": "Claude 更新后需重新应用",
-        "help.step9.body": "如需撤销修改，使用「还原」；若能匹配到当前版本的完整备份，Anthropic 的原始签名会一并恢复。遇到异常时使用「自检」，程序会检查应用完整性、未完成事务、字体、磁盘空间、哈希与签名，结果记录在日志中。",
-        "help.step9.title": "还原与自检",
         "help.title": "如何使用 Clfont",
+        "help.a2.lead": "在「测试 Claude」卡片上，点击",
+        "help.a2.tail": "，约需 1 分钟",
+        "help.a4.lead": "点击",
+        "help.sec.start": "开始使用",
+        "help.sec.settings": "各项设置",
+        "help.sec.daily": "日常维护",
+
+        "help.step1.title": "首次使用：授予「App 管理」权限",
+        "help.step1.body": "修改 Claude 的应用包需要「App 管理」权限。第一次执行应用时 macOS 会弹出请求，选择「允许」即可。\n若此前误选了「不允许」，程序会在界面上说明，并提供直接前往「系统设置 → 隐私与安全性 → App 管理」的按钮，打开开关后重新执行。\n除此之外不需要任何额外组件，也不需要「辅助功能」权限。",
+        "help.step2.title": "先在测试 Claude 上确认效果",
+        "help.step2.body": "应用字体需要给 Claude 重新签名，正式版的原始签名会因此被替换。为避免反复改动日常使用的应用，建议每次换字体先在测试 Claude 上看效果。\n测试 Claude 是正式版的完整副本，有独立的应用标识与配置目录，怎么折腾都不影响正式版。首次启动会要求授权钥匙串「Claude Safe Storage」，输入 Mac 的登录密码并选「始终允许」；该弹窗可能连续出现几次（实测最多 4 次），每次都一样处理。",
+        "help.step3.title": "应用到正式 Claude",
+        "help.step3.body": "效果满意后，切回「正式 Claude」卡片再执行一次。整个过程约 1 至 2 分钟，期间请勿关闭窗口。",
+
+        "help.step4.title": "替换范围与字体",
+        "help.step4.body": "「中文」只改中文字形，界面图标不受影响，是推荐选项。「英文」和「中英文」会连界面上的英文一起改；若之后发现个别图标显示异常，改回「中文」即可。\n选定范围后在下方挑字体，预览会立即更新。",
+        "help.step5.title": "字号",
+        "help.step5.body": "中文与英文可分别在 80% 到 150% 之间调节，用来弥补宋体这类字体默认显示偏小的问题。\n它只缩放被替换掉的那些字，界面图标、行距与整体布局都不动——不是把整个页面放大。",
+        "help.step6.title": "代码块",
+        "help.step6.body": "可单独指定代码块与行内代码的等宽字体和字号，正文不受影响。默认「保持不变」，此时完全不注入相关规则。",
+        "help.step7.title": "页面底色",
+        "help.step7.body": "把 Claude 的界面底色换成早期版本的米色。提供三档预设，也可以用取色器自选。\n仅在浅色模式生效；深色模式下这项设置不会起作用，无需担心配色被改坏。",
+        "help.step8.title": "兼容模式",
+        "help.step8.body": "保持「标准」即可。若个别区域的字体没跟着变，再切到「扩展」——它会把同样的替换规则扩展到更多常见字体族。",
+
+        "help.step9.title": "Claude 更新后需重新应用",
+        "help.step9.body": "Claude 的自动更新会重写应用内容，此前应用的字体随之失效。程序检测到这一情况时会在主界面提示，并附一个「重新应用」按钮，点一下就好，字体设置无需重选。",
+        "help.step10.title": "还原与自检",
+        "help.step10.body": "「还原」撤销全部修改。若能匹配到当前版本的完整备份，Anthropic 的原始签名会一并恢复。\n遇到异常先点「自检」：它会检查应用完整性、未完成的事务、字体、磁盘空间、哈希与签名，结果写进日志。",
+        "help.step11.title": "应用过程与失败处理",
+        "help.step11.body": "应用依次执行：退出目标应用 → 创建完整备份 → 重新打包 → 更新完整性哈希 → 重新签名 → 启动验证。\n任何一步失败或中途取消，都会把文件恢复原样并重新验证签名。所以最坏的结果是「没能应用」，而不是「Claude 打不开」。\n需要注意：自动回滚只恢复文件内容，不恢复 Claude 的原始签名；要连签名一起恢复，请执行「还原」。",
+
+        "help.safety.title": "关于安全性",
+        "help.safety.b1": "注入内容只有字体规则（CSS @font-face），不改动任何网络请求，也不绕过任何限制或配额。",
+        "help.safety.b2": "不读取、不上传账号信息与聊天记录，全部操作都在本机完成。",
+        "help.safety.b3": "应用前会创建完整备份。任一环节失败或中途取消都会把文件恢复原样，随时可用「还原」完全撤销。",
+        "help.footer": "本工具只修改你选定的 Claude 应用包，不读取账号与会话数据。",
         "target.hint": "建议先在测试 Claude 上确认字体效果，再应用到正式 Claude。",
         "stale.action": "重新应用",
         "appmgmt.body": "修改 Claude 的应用包需要「App 管理」权限。系统会在第一次执行时弹出请求，若此前选择了「不允许」，请点击下方按钮前往设置，为 Clfont 打开开关后重新执行。",
@@ -220,62 +234,72 @@ final class Copy: ObservableObject {
         "release.current": "当前版本",
 
         // —— 教程里的操作行
-        "help.a2.lead": "在「测试 Claude」卡片上，点击",
-        "help.a2.tail": "，约需 1 分钟",
-        "help.a4.lead": "点击",
-        "help.a3.tail": "不生效时再改用「扩展」",
     ]
 
     /// 英文表。缺的条目自动回落到中文，所以不必强求逐条对齐。
     static let en: [String: String] = [
-        "font.mode.desc": "Try Extended only if Standard leaves some text unchanged",
-        "font.preview.cjk": "字体是沉默的声音",
-        "font.scope.desc": "Chinese only is safest; English also restyles the interface",
-        "footer.ops": "Applying quits that copy of Claude first and always takes a full backup. If any step fails or you cancel, the files are put back exactly as they were, and Restore undoes everything at any time. macOS may ask for keychain access the first time Claude starts afterwards — that is expected.",
-        "footer.safety": "Clfont only changes how Claude renders text on this Mac. It injects font rules and nothing else: no network requests are altered, and no account details or conversations are read.",
-        "header.subtitle": "Use the fonts you like in Claude — safely",
-        "help.footer": "Clfont only modifies the Claude app bundle you select. It never reads your account or conversations.",
-        "help.safety.b1": "The only thing injected is font rules (CSS @font-face). No network requests are altered, no client identity is forged, and no limit or quota is bypassed.",
-        "help.safety.b2": "No account details or conversations are read or uploaded. Everything happens on this Mac.",
-        "help.safety.b3": "A full backup is taken before any change. If a step fails or you cancel, the files are put back as they were, and Restore undoes everything at any time.",
-        "help.safety.title": "About safety",
-        "help.step1.body": "Modifying Claude's app bundle needs the App Management permission. macOS asks for it the first time you apply; choose Allow. If you previously chose Don't Allow, open System Settings → Privacy & Security → App Management, turn Clfont on, and try again.\nNothing else is required: Clfont does not depend on the Xcode Command Line Tools, and does not need Accessibility permission.",
+        "help.title": "Using Clfont",
+        "help.a2.lead": "On the Test Claude card, click",
+        "help.a2.tail": ", which takes about a minute",
+        "help.a4.lead": "Click",
+        "help.sec.start": "Getting started",
+        "help.sec.settings": "Settings",
+        "help.sec.daily": "Day to day",
+
         "help.step1.title": "First run: the App Management permission",
-        "help.step2.body": "Applying fonts requires re-signing Claude, which replaces its original signature. To avoid repeatedly modifying the app you use every day, confirm each font choice on the test Claude first. The test Claude is a full copy with its own app identity and its own profile directory, fully isolated from the real one.",
+        "help.step1.body": "Changing Claude's app bundle needs the App Management permission. macOS asks for it the first time you apply — choose Allow.\nIf you turned it down earlier, Clfont says so in the window and gives you a button straight to System Settings → Privacy & Security → App Management. Switch Clfont on there and try again.\nNothing else is needed. Clfont does not use Accessibility permission.",
         "help.step2.title": "Try it on the test Claude first",
-        "help.step3.body": "Scope decides which text is replaced. Chinese changes Chinese glyphs only and leaves interface icons untouched — this is the recommended choice. English and Both also change how the interface reads; if any icon later looks wrong, switch back to Chinese. Pick your fonts below and the preview updates immediately.",
-        "help.step3.title": "Choose scope and fonts",
-        "help.step4.body": "Make sure Test Claude is selected, then apply. It takes one to two minutes — leave the window open.",
-        "help.step4.title": "Apply to the test Claude",
-        "help.step5.body": "On first launch macOS asks for access to the \"Claude Safe Storage\" keychain item. Enter your Mac login password (the one you unlock the screen with) and choose Always Allow. The dialog can appear several times in a row (up to four in our testing); answer it the same way each time. Once allowed, the copy signs in with your existing session.\nThe copy may show a \"For your security, sign in again\" banner. Ignore it. Use this copy only to check how the fonts look; keep using the real Claude for everyday work.",
-        "help.step5.title": "Launch the test Claude and check the fonts",
-        "help.step6.body": "Once you are happy with the result, switch back to the Production Claude card and apply again.",
-        "help.step6.title": "Apply to the real Claude",
-        "help.step7.body": "Applying runs in order: quit the target app → take a full backup → repack → update the integrity hash → re-sign → verify it launches. If any step fails or you cancel, the files are put back and the signature re-verified, so the worst outcome is \"not applied\" — never an app that won't start.\nNote that the automatic rollback does not restore Claude's original signature. Use Restore for that.",
-        "help.step7.title": "What applying does, and what happens if it fails",
-        "help.step8.body": "Claude's automatic updates overwrite whatever Clfont applied. When that happens, the main window says so and offers a Re-apply button — one click restores it, and your font settings are kept.",
-        "help.step8.title": "Re-apply after Claude updates",
-        "help.step9.body": "Use Restore to undo everything; when a full backup matching the current version exists, Anthropic's original signature comes back with it. If something looks wrong, use Diagnose — it checks app integrity, unfinished transactions, fonts, disk space, hashes and signatures, and writes the result to the log.",
-        "help.step9.title": "Restore and Diagnose",
-        "help.title": "How to use Clfont",
-        "target.hint": "Check the fonts on the test Claude before applying to the real one.",
+        "help.step2.body": "Applying fonts means re-signing Claude, which replaces its original signature. So rather than keep reworking the app you use all day, try each font on the test Claude first.\nThe test Claude is a full copy with its own app identity and its own profile — nothing you do to it touches the real one. The first launch asks for the \"Claude Safe Storage\" keychain item: enter your Mac login password and pick Always Allow. It may ask a few times over (four, in our testing); answer it the same way each time.",
+        "help.step3.title": "Apply to your main Claude",
+        "help.step3.body": "Happy with how it looks? Switch back to the Main Claude card and apply again. It takes a minute or two — leave the window open while it works.",
+
+        "help.step4.title": "Scope and fonts",
+        "help.step4.body": "Chinese swaps Chinese characters only and leaves the interface icons alone, which is why it's the default. English and Both change the interface text as well; if an icon ever looks wrong afterwards, switch back to Chinese.\nPick your fonts underneath and the preview updates as you go.",
+        "help.step5.title": "Size",
+        "help.step5.body": "Chinese and English each scale from 80% to 150%, which helps with fonts like Songti that come out small at their default size.\nOnly the replaced characters scale. Icons, line spacing and layout stay put, so this is not the same as zooming the page.",
+        "help.step6.title": "Code blocks",
+        "help.step6.body": "Code blocks and inline code can take their own monospace font and size, with body text left alone. Leave it unchanged and Clfont writes no code-related rules at all.",
+        "help.step7.title": "Page background",
+        "help.step7.body": "Brings back the warm cream background of earlier Claude versions. Three presets, or pick your own with the colour well.\nLight mode only. In dark mode this setting does nothing, so there's no risk of wrecking the dark palette.",
+        "help.step8.title": "Compatibility",
+        "help.step8.body": "Leave this on Standard. If some corner of the interface keeps its old font, switch to Extended, which applies the same rules across a wider set of font families.",
+
+        "help.step9.title": "Re-apply after Claude updates",
+        "help.step9.body": "A Claude update rewrites the app, and your fonts go with it. Clfont notices and says so in the main window, with a Re-apply button next to it. One click and you're back — your settings were never lost.",
+        "help.step10.title": "Restore and Diagnose",
+        "help.step10.body": "Restore undoes everything. When a full backup of the current version is available, Anthropic's original signature comes back with it.\nIf something looks off, start with Diagnose: it checks app integrity, unfinished work, fonts, disk space, hashes and signatures, and writes what it finds to the log.",
+        "help.step11.title": "What applying does, and what happens if it fails",
+        "help.step11.body": "Applying works through: quit the target app → take a full backup → repack → update the integrity hash → re-sign → check that it launches.\nIf any step fails, or you cancel partway, the files go back as they were and the signature is verified again. The worst outcome is that nothing was applied, not a Claude that won't open.\nOne thing to know: that automatic rollback restores the files, not Claude's original signature. Use Restore if you want the signature back too.",
+
+        "help.safety.title": "On safety",
+        "help.safety.b1": "The only thing injected is font rules (CSS @font-face). Network requests are untouched, and nothing bypasses any limit or quota.",
+        "help.safety.b2": "Your account and your conversations are never read or uploaded. Everything happens on this Mac.",
+        "help.safety.b3": "A full backup is taken before anything changes. If a step fails or you cancel, the files go back as they were, and Restore undoes everything whenever you like.",
+        "help.footer": "Clfont only touches the Claude app bundle you pick. It never reads your account or your conversations.",
+        "font.mode.desc": "Only reach for Extended if Standard misses something",
+        "font.preview.cjk": "字体是沉默的声音",
+        "font.scope.desc": "Chinese alone is the safe choice; English restyles the interface too",
+        "footer.ops": "Applying quits Claude first and always takes a full backup. If a step fails or you cancel, the files go back as they were, and Restore undoes everything whenever you like. macOS may ask for keychain access the next time Claude starts; that is expected.",
+        "footer.safety": "Clfont changes how Claude draws text on this Mac, and nothing else. It injects font rules only: no network request is touched, and your account and conversations are never read.",
+        "header.subtitle": "Put the fonts you like into Claude, safely",
+        "target.hint": "Try the fonts on the test Claude before touching the real one.",
         "stale.action": "Re-apply",
-        "stale.body": "Claude's automatic update rewrote the app, so the fonts you applied are gone. Re-applying restores them; your settings are unchanged.",
+        "stale.body": "A Claude update rewrote the app and took your fonts with it. Re-apply to get them back; your settings were never lost.",
         "stale.title": "Claude updated — your fonts were overwritten",
-        "appmgmt.body": "Modifying Claude's app bundle needs the App Management permission. macOS asks the first time you apply. If you chose Don't Allow, use the button below, turn Clfont on, and try again.",
+        "appmgmt.body": "Changing Claude's app bundle needs the App Management permission. macOS asks the first time you apply. If you turned it down, use the button below, switch Clfont on, and try again.",
         "appmgmt.open": "Open App Management settings",
         "appmgmt.recheck": "Enabled — check again",
         "appmgmt.title": "Can't modify Claude: App Management permission missing",
-        "helper.body": "Early versions of Clfont stripped the system permissions of Claude's internal components while re-signing, which breaks Cowork and virtual machines. Re-apply once and Clfont will restore from a full backup before making its changes. If no backup is available, reinstall Claude.",
+        "helper.body": "Older versions of Clfont stripped the system permissions from Claude's internal components while re-signing, which breaks Cowork and virtual machines. Apply once more and Clfont restores from a full backup before it changes anything. With no backup to work from, reinstall Claude.",
         "helper.title": "Permissions stripped by an earlier version",
         "update.auto": "Check for updates on launch",
-        "update.body": "Download it and replace Clfont in your Applications folder; your font settings are kept. If you have already applied fonts to Claude, apply once more after updating.",
+        "update.body": "Download it and drop it into your Applications folder, replacing the old one. Your settings carry over. If you have already applied fonts to Claude, apply once more afterwards.",
         "update.download": "Download",
         "update.later": "Later",
 
         "header.whatsnew": "What's new",
         "header.help": "How to use",
-        "target.prod": "Production Claude",
+        "target.prod": "Main Claude",
         "target.test": "Test Claude",
         "target.none": "Not created yet — use the button above",
         "target.title": "Which Claude do you want to restyle?",
@@ -288,7 +312,7 @@ final class Copy: ObservableObject {
         "status.applied": "{font} applied",
         "status.font": "font",
         "status.stale": "Fonts are not in effect",
-        "status.none": "Not applied — reversible at any time",
+        "status.none": "Not applied. Reversible whenever you like",
         "status.detail": "Details",
         "status.collapse": "Hide",
         "status.backedup": "Backed up",
@@ -326,12 +350,12 @@ final class Copy: ObservableObject {
         "code.group": "Code blocks",
         "code.font": "Code font",
         "code.size": "Code size",
-        "code.desc": "Affects code blocks and inline code only — body text is untouched",
+        "code.desc": "Code blocks and inline code only. Body text stays as it is",
         "code.keep": "Leave unchanged",
 
         "look.group": "Appearance",
         "look.bg": "Page background",
-        "look.bg.desc": "Restore the warm cream background of earlier Claude versions. Light mode only.",
+        "look.bg.desc": "Brings back the cream background of earlier Claude versions. Light mode only.",
         "look.bg.off": "Unchanged",
         "look.bg.custom": "Custom",
         "header.lang": "Clfont's own interface language",
@@ -346,14 +370,14 @@ final class Copy: ObservableObject {
         "log.hide": "Hide log",
         "log.clear": "Clear log",
         "log.cleared": "Log cleared",
-        "log.guard": "Backed up — rolls back automatically on failure",
+        "log.guard": "Backed up. Rolls back on its own if anything fails",
 
         "busy.status": "Reading {target} status",
-        "busy.install": "Applying to {target}: back up → repack → re-sign → launch test (1–2 min)",
+        "busy.install": "Applying to {target}: backing up → repacking → re-signing → checking it launches (1–2 min)",
         "busy.uninstall": "Restoring {target}: put files back → re-sign",
         "busy.doctor": "Diagnosing {target}",
         "busy.prune": "Removing old backups",
-        "busy.create": "Creating test copy: duplicate → new identity → re-sign → carry over session",
+        "busy.create": "Building the test copy: duplicating → new identity → re-signing → carrying your session across",
         "busy.remove": "Removing test Claude: copy, profile and its backups",
         "msg.clifail": "✗ Could not start the CLI: {err}",
         "msg.noscript": "✗ {name} not found",
@@ -364,10 +388,10 @@ final class Copy: ObservableObject {
         "sheet.ok": "Got it",
         "sheet.delete.title": "Delete the test Claude?",
         "sheet.delete.ok": "Delete",
-        "sheet.delete.body": "This removes the test Claude, its profile directory and its full backups in Clfont's data folder, freeing roughly 1 GB.\n\nYour real Claude and its backups are untouched. You can create it again at any time.",
+        "sheet.delete.body": "This removes the test Claude, its profile and its backups in Clfont's data folder, freeing around 1 GB.\n\nYour real Claude and its backups are untouched, and you can make a new test copy whenever you want.",
         "sheet.create.title": "Create a test Claude?",
         "sheet.create.ok": "Create",
-        "sheet.create.body": "This copies your real Claude, gives the copy its own app identity, and carries your current session over so you don't have to sign in again. The copy uses a separate profile directory — nothing you do in it affects the real Claude.\n\nAn existing copy is deleted and recreated.",
+        "sheet.create.body": "This makes a copy of your Claude, gives it its own app identity, and brings your current session across so you need not sign in again. The copy keeps a separate profile, so nothing you do in it reaches the real Claude.\n\nAny existing copy is replaced.",
         "sheet.restore.title": "Restore Claude's fonts?",
         "sheet.restore.body": "This restores {target}'s app.asar from backup and re-signs it. The current {font} setting is removed. Claude must be quit and reopened.",
         "sheet.restore.backup": "Backup {name}",
@@ -387,19 +411,15 @@ final class Copy: ObservableObject {
 
         "about.title": "About Clfont",
         "about.version": "Version {v} ({b})",
-        "about.tagline": "Replaces the display fonts in Claude for desktop — Chinese, English, or both",
+        "about.tagline": "Swaps the display fonts in Claude for desktop: Chinese, English, or both",
         "about.dev": "Developer",
         "about.devname": "Wan Zhao (Jovan)",
-        "about.footer": "Only modifies the Claude app installed on this Mac. Never reads accounts or conversations.",
+        "about.footer": "Only touches the Claude installed on this Mac. Never reads accounts or conversations.",
         "about.lang": "Language",
         "about.lang.auto": "System",
         "release.version": "Version {v}",
         "release.current": "Current",
 
-        "help.a2.lead": "On the Test Claude card, click",
-        "help.a2.tail": " — takes about a minute",
-        "help.a4.lead": "Click",
-        "help.a3.tail": "switch to Extended only if Standard doesn't work",
     ]
 
     static var fileURL: URL {
@@ -2213,6 +2233,16 @@ struct ContentView: View {
             .strokeBorder(DS.success.opacity(0.18), lineWidth: 1))
     }
 
+    /// 分节标题。教程按「开始使用 / 各项设置 / 日常维护」分三段——
+    /// 前三步是上手路径，中间五项各讲一个功能，最后三条是长期会用到的。
+    private func helpSection(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 11, weight: .semibold))
+            .tracking(0.66)
+            .foregroundStyle(.secondary)
+            .padding(.top, 6)
+    }
+
     private func helpStep<C: View>(_ n: Int, _ title: String, _ body: String,
                                    @ViewBuilder extra: () -> C) -> some View {
         HStack(alignment: .top, spacing: 12) {
@@ -2258,6 +2288,7 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 20) {
                         safetyNote
 
+                        helpSection(t("help.sec.start"))
                         helpStep(1, t("help.step1.title"), t("help.step1.body"))
 
                         helpStep(2, t("help.step2.title"), t("help.step2.body")) {
@@ -2267,33 +2298,38 @@ struct ContentView: View {
                         }
 
                         helpStep(3, t("help.step3.title"), t("help.step3.body")) {
-                            VStack(alignment: .leading, spacing: 6) {
-                                ActionLine(lead: t("font.scope")) {
-                                    SegChip(options: [t("font.scope.cjk"), t("font.scope.latin"), t("font.scope.both")], selected: 0)
-                                }
-                                ActionLine(lead: t("font.mode"), tail: t("help.a3.tail")) {
-                                    SegChip(options: [t("font.mode.std"), t("font.mode.ext")], selected: 0)
-                                }
+                            ActionLine(lead: t("help.a4.lead")) {
+                                BtnChip(title: t("action.apply", ["{target}": t("target.prod")]),
+                                        kind: .primary)
                             }
                         }
 
+                        helpSection(t("help.sec.settings"))
                         helpStep(4, t("help.step4.title"), t("help.step4.body")) {
-                            ActionLine(lead: t("help.a4.lead")) { BtnChip(title: t("action.apply", ["{target}": t("target.test")]), kind: .primary) }
+                            ActionLine(lead: t("font.scope")) {
+                                SegChip(options: [t("font.scope.cjk"), t("font.scope.latin"),
+                                                  t("font.scope.both")], selected: 0)
+                            }
                         }
 
-                        helpStep(5, t("help.step5.title"), t("help.step5.body")) {
-                            ActionLine(lead: t("help.a4.lead")) { BtnChip(title: t("action.open"), kind: .glass) }
-                        }
-
-                        helpStep(6, t("help.step6.title"), t("help.step6.body")) {
-                            ActionLine(lead: t("help.a4.lead")) { BtnChip(title: t("action.apply", ["{target}": t("target.prod")]), kind: .primary) }
-                        }
-
+                        helpStep(5, t("help.step5.title"), t("help.step5.body"))
+                        helpStep(6, t("help.step6.title"), t("help.step6.body"))
                         helpStep(7, t("help.step7.title"), t("help.step7.body"))
 
-                        helpStep(8, t("help.step8.title"), t("help.step8.body"))
+                        helpStep(8, t("help.step8.title"), t("help.step8.body")) {
+                            ActionLine(lead: t("font.mode")) {
+                                SegChip(options: [t("font.mode.std"), t("font.mode.ext")], selected: 0)
+                            }
+                        }
 
+                        helpSection(t("help.sec.daily"))
                         helpStep(9, t("help.step9.title"), t("help.step9.body")) {
+                            ActionLine(lead: t("help.a4.lead")) {
+                                BtnChip(title: t("stale.action"), kind: .primary)
+                            }
+                        }
+
+                        helpStep(10, t("help.step10.title"), t("help.step10.body")) {
                             ActionLine(lead: t("help.a4.lead")) {
                                 HStack(spacing: 6) {
                                     BtnChip(title: t("action.restore"), kind: .danger)
@@ -2301,6 +2337,8 @@ struct ContentView: View {
                                 }
                             }
                         }
+
+                        helpStep(11, t("help.step11.title"), t("help.step11.body"))
                     }
                     .padding(.horizontal, 24).padding(.vertical, 20)
                 }

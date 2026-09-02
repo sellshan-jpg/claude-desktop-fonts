@@ -12,6 +12,7 @@
            （其中 6 秒是冒烟测试观察进程存活，那是被测行为的一部分，不能省）
 """
 
+import re
 import importlib.machinery
 import importlib.util
 import json
@@ -630,6 +631,27 @@ def test_parity_command_output_identical():
                 outs[0].splitlines(), outs[1].splitlines(),
                 "python", "swift", lineterm=""))[:20])
             raise AssertionError(f"命令 {cmds} 两版输出不一致：\n{d}")
+
+
+@test
+def test_every_copy_key_is_defined():
+    """界面上每个 t("key") 都必须在中英两张表里有定义。
+
+    缺了不会报错，只会把 key 名原样画到界面上——批量改文案时删漏一条就会这样，
+    而且只在切到某种语言时才看得见。这条测试专防这个。"""
+    src = (ROOT / "gui" / "ClfontApp.swift").read_text()
+    used = set(re.findall(r't\("([a-z0-9._]+)"', src)) - {"key"}   # t("key") 出现在文档注释里
+
+    def table(name):
+        i = src.index(f"static let {name}: [String: String] = [")
+        j = src.index("\n    ]", i)
+        return set(re.findall(r'"([a-z0-9._]+)":', src[i:j]))
+
+    zh, en = table("zh"), table("en")
+    missing_zh = sorted(used - zh)
+    ok(not missing_zh, f"中文表缺少这些键（界面会显示键名）：{missing_zh}")
+    missing_en = sorted(used - en)
+    ok(not missing_en, f"英文表缺少这些键（会回落到中文）：{missing_en}")
 
 
 # ---------------------------------------------------------------- 入口
