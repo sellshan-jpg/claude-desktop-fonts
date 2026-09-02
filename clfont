@@ -1593,9 +1593,14 @@ def cmd_status(_args):
     backups = list_backups()
     info("整包备份：" + ("、".join(b.name for b in backups) if backups else "无"))
     info(f"工具固定位置：{CANON}{'（已安装）' if CANON.exists() else '（未安装，install 时会自动复制）'}")
-    info(f"配置：范围 {cfg.get('scope', 'cjk')}，中文字体 {cfg['font'] or '—'}"
-         f"（{_scale(cfg, 'font_scale')}%），英文字体 {cfg.get('font_latin') or '—'}"
-         f"（{_scale(cfg, 'font_scale_latin')}%），模式 {cfg.get('mode', 'auto')}")
+    # 字号只在非 100% 时才写出来：GUI 拿这一行里的字体名做标题，
+    # 常态下多一个「（100%）」纯属噪声。
+    def fmt(name, pct):
+        return (name or "—") + (f"（{pct}%）" if pct != 100 else "")
+    info(f"配置：范围 {cfg.get('scope', 'cjk')}，"
+         f"中文字体 {fmt(cfg['font'], _scale(cfg, 'font_scale'))}，"
+         f"英文字体 {fmt(cfg.get('font_latin'), _scale(cfg, 'font_scale_latin'))}，"
+         f"模式 {cfg.get('mode', 'auto')}")
 
 
 def cmd_doctor(_args):
