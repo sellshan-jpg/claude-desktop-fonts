@@ -2448,6 +2448,13 @@ struct ContentView: View {
                         .padding(.horizontal, 7).padding(.vertical, 2)
                         .background(Capsule().fill(DS.accent.opacity(0.12)))
                 }
+                if n.major {
+                    Text(t("release.major"))
+                        .font(.system(size: 10.5, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 7).padding(.vertical, 2.5)
+                        .background(Capsule().fill(DS.prod))
+                }
             }
             VStack(alignment: .leading, spacing: 5) {
                 ForEach(Array(n.changes.enumerated()), id: \.offset) { _, c in
