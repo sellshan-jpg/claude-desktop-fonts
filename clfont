@@ -102,11 +102,19 @@ UNICODE_RANGE = ("U+2E80-2EFF, U+3000-303F, U+3400-4DBF, "
                  "U+4E00-9FFF, U+F900-FAFF, U+FF00-FFEF")
 UNICODE_RANGE_CJK = UNICODE_RANGE
 
-# 英文只覆盖基本拉丁（U+0020-007E）。**刻意不含拉丁文补充区 U+00A0-00FF 和
-# 私用区**：Claude 界面上的图标就是 anthropic 字体里的字形，实测把 font-family
-# 整个换掉时它们显示成 É（U+00C9，落在补充区）和 □，说明图标很可能就藏在那些
-# 码位上。少覆盖一点，换来图标不会碎。
+# 英文的基础覆盖只到基本拉丁（U+0020-007E）。**刻意不含 U+00A0-00BF 那段符号区
+# 和私用区**：Claude 界面上的图标就是 anthropic 字体里的字形，实测把 font-family
+# 整个换掉时它们显示成 É（U+00C9）和 □，说明图标确实藏在这些码位上。
 UNICODE_RANGE_LATIN = "U+0020-007E"
+
+# 带重音的拉丁字母（é ü ñ ł ż …）。这一段全是字母，没有符号，但**只给正文字体
+# 用，不给界面字体**：上面那条实测说明图标落在 U+00C9 一带，而图标是
+# anthropic-sans 的字形；正文走 anthropic-serif，用不到图标，因此可以安全放开。
+# 不放开的话，欧洲语言正文会出现「普通字母换了字体、重音字母没换」的明显混排。
+UNICODE_RANGE_LATIN_EXT = "U+00C0-00FF, U+0100-017F"
+
+# 承载图标字形的字体族。这些族只覆盖基础拉丁，绝不扩展。
+ICON_BEARING_FAMILIES = ("anthropic-sans",)
 KEEP_BACKUPS = 2
 
 DEFAULT_CONFIG = {
@@ -117,6 +125,9 @@ DEFAULT_CONFIG = {
     "mode": "auto",           # auto | brute
     "font_scale": 100,        # 中文字号，百分比（见 _scale）
     "font_scale_latin": 100,  # 英文字号，百分比
+    "font_mono": "",          # 代码块字体（空 = 不改）
+    "font_mono_scale": 100,   # 代码块字号，百分比
+    "bg_color": "",           # 页面底色（空 = 不改），形如 #F0EEE6
 }
 
 
@@ -620,18 +631,19 @@ def size_adjust_css(scale):
 
 
 def scope_specs(cfg):
-    """按 scope 展开成 [(码位区间, 常规 src, 粗体 src, 字号百分比)]。
-    字体没填的分组跳过。"""
+    """按 scope 展开成 [(kind, 码位区间, 常规 src, 粗体 src, 字号百分比)]。
+    kind 为 cjk / latin，决定该分组能否扩展到重音字母区。字体没填的分组跳过。"""
     scope = cfg.get("scope", "cjk")
     out = []
     if scope in ("cjk", "both"):
         reg, bold = _srcs(cfg, "font")
         if reg:
-            out.append((UNICODE_RANGE_CJK, reg, bold, _scale(cfg, "font_scale")))
+            out.append(("cjk", UNICODE_RANGE_CJK, reg, bold,
+                        _scale(cfg, "font_scale")))
     if scope in ("latin", "both"):
         reg, bold = _srcs(cfg, "font_latin")
         if reg:
-            out.append((UNICODE_RANGE_LATIN, reg, bold,
+            out.append(("latin", UNICODE_RANGE_LATIN, reg, bold,
                         _scale(cfg, "font_scale_latin")))
     return out
 
@@ -669,19 +681,105 @@ def face_override_css(cfg, families=PAGE_FONT_FAMILIES):
     渲染。好处是**完全不改任何 font-family**——侧边栏那些图标其实就是
     anthropic-sans 里的字形，一旦覆盖 font-family 就会变成豆腐块。"""
     out = []
-    for rng, reg_src, bold_src, scale in scope_specs(cfg):
+    for kind, rng, reg_src, bold_src, scale in scope_specs(cfg):
         adj = size_adjust_css(scale)
         for fam in families:
+            # 正文字体可以连重音字母一起换；承载图标的界面字体不行
+            frng = rng
+            if kind == "latin" and fam not in ICON_BEARING_FAMILIES:
+                frng = rng + ", " + UNICODE_RANGE_LATIN_EXT
             for style in ("normal", "italic"):
                 # 页面自己的 face 声明的是可变字重 300 800，这里按常规/粗体拆
                 # 两段，免得粗体落回原字体（那样又会走系统兜底）。
                 out.append(f'@font-face{{font-family:"{fam}";src:{reg_src};'
-                           f'unicode-range:{rng};{adj}'
+                           f'unicode-range:{frng};{adj}'
                            f'font-weight:100 500;font-style:{style};}}')
                 out.append(f'@font-face{{font-family:"{fam}";src:{bold_src};'
-                           f'unicode-range:{rng};{adj}'
+                           f'unicode-range:{frng};{adj}'
                            f'font-weight:501 900;font-style:{style};}}')
     return "".join(out)
+
+
+HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
+
+
+def background_css(cfg):
+    """页面底色。
+
+    改的是 CDS 的 surface 语义 token，不去动底层色阶——分隔线、边框也在用那些，
+    一起改会牵连出一堆对比度问题。层次关系保留原设计：surface-0 最深（页面），
+    往上逐级混向白色（卡片、浮层最浅）。
+
+    两个必要条件，都是实测得出的，改动前请先复现：
+    1. 变量名必须带 --cds- 前缀（见上方说明）；
+    2. 必须加 !important。这些 token 会被页面后加载的样式表重新声明，普通声明
+       会被赢回去——实测不加时计算值纹丝不动。
+
+    只在浅色模式生效。包内文档原话：暗色模式是 :root 上的 [data-mode="dark"]，
+    没有该属性时跟随 prefers-color-scheme。两条规则合起来覆盖「显式浅色」和
+    「未声明且系统为浅色」；显式深色一律不碰。"""
+    color = (cfg.get("bg_color") or "").strip()
+    if not color:
+        return ""
+    if not HEX_RE.match(color):
+        info(f"底色 {color!r} 不是 #RRGGBB 形式，已忽略")
+        return ""
+
+    def mix(pct):
+        # pct 为底色所占比例，其余混白；越靠上的层越浅
+        return f"color-mix(in srgb, {color} {pct}%, #ffffff)"
+
+    body = "".join(f"{v}:{val} !important;" for v, val in (
+        ("--cds-surface-0", color),
+        ("--cds-page-bg", color),
+        ("--background-color-page", color),
+        ("--cds-surface-1", mix(60)),
+        ("--cds-surface-2", mix(30)),
+        ("--cds-surface-3", mix(30)),
+        ("--cds-surface-panel", mix(30)),
+        ("--cds-surface-popover", mix(30)),
+    ))
+    return (
+        f':root[data-mode="light"],.cds-root[data-mode="light"]{{{body}}}'
+        f'@media (prefers-color-scheme: light){{'
+        f':root:not([data-mode="dark"]),.cds-root:not([data-mode="dark"]){{{body}}}}}'
+    )
+
+
+CLFONT_MONO_FAMILY = "ClfontMono"
+
+# 远程 claude.ai 页面用的是 CDS 的 .cds-root 作用域版本，变量名带 --cds- 前缀
+# （html 元素上就挂着 class="cds-root"）。本地应用外壳里那份无前缀的 :root 导出
+# 是另一套，改它对界面没有任何影响——这一点是实测出来的，别再改回去。
+CDS_MONO_VAR = "--cds-font-mono"
+CDS_SURFACE_VARS = ("--cds-surface-0", "--cds-surface-1", "--cds-surface-2",
+                    "--cds-surface-3", "--cds-surface-panel",
+                    "--cds-surface-popover", "--cds-page-bg",
+                    "--background-color-page")
+
+
+def mono_css(cfg):
+    """代码块字体。
+
+    先用 @font-face 定义我们自己的族（字号才有地方落，走 size-adjust），
+    再把 --cds-font-mono 指向它，并保留原有的 ui-monospace 兜底链。
+
+    必须带 !important：这些 token 会被页面后加载的样式表重新声明，不加就会被
+    赢回去（实测：不加 !important 时 --cds-font-mono 保持原值不动）。"""
+    name = (cfg.get("font_mono") or "").strip()
+    if not name:
+        return ""
+    reg, bold = _srcs(cfg, "font_mono")
+    if not reg:
+        return ""
+    adj = size_adjust_css(_scale(cfg, "font_mono_scale"))
+    fam = CLFONT_MONO_FAMILY
+    stack = f'"{fam}", ui-monospace, SFMono-Regular, Menlo, monospace'
+    return (
+        f'@font-face{{font-family:"{fam}";src:{reg};font-weight:100 500;{adj}}}'
+        f'@font-face{{font-family:"{fam}";src:{bold};font-weight:501 900;{adj}}}'
+        f':root,.cds-root{{{CDS_MONO_VAR}:{stack} !important;}}'
+    )
 
 
 def vars_css():
@@ -714,6 +812,8 @@ def build_css(mode, cfg):
         # 否则中文也会跟着变。
         parts += [font_face_css(cfg), vars_css()]
     parts.append(face_override_css(cfg))
+    parts.append(mono_css(cfg))
+    parts.append(background_css(cfg))
     if mode == "brute":
         parts.append(brute_css(cfg))
     css = " ".join(parts)
@@ -1384,8 +1484,15 @@ def cmd_install(args):
         cfg["font_scale"] = args.scale
     if getattr(args, "scale_latin", None) is not None:
         cfg["font_scale_latin"] = args.scale_latin
-    if not scope_specs(cfg):
-        die("没有可用的字体设置：scope=%s，但对应的字体名为空。" % cfg["scope"])
+    if getattr(args, "mono", None) is not None:
+        cfg["font_mono"] = args.mono
+    if getattr(args, "mono_scale", None) is not None:
+        cfg["font_mono_scale"] = args.mono_scale
+    if getattr(args, "bg", None) is not None:
+        cfg["bg_color"] = args.bg
+    if not (scope_specs(cfg) or mono_css(cfg) or background_css(cfg)):
+        die("没有任何可应用的设置：scope=%s 对应的字体名为空，"
+            "代码块字体与页面底色也都没设。" % cfg["scope"])
 
     step("准备")
     require_codesign()
@@ -1601,6 +1708,8 @@ def cmd_status(_args):
          f"中文字体 {fmt(cfg['font'], _scale(cfg, 'font_scale'))}，"
          f"英文字体 {fmt(cfg.get('font_latin'), _scale(cfg, 'font_scale_latin'))}，"
          f"模式 {cfg.get('mode', 'auto')}")
+    info(f"代码块字体 {fmt(cfg.get('font_mono'), _scale(cfg, 'font_mono_scale'))}"
+         f"，页面底色 {cfg.get('bg_color') or '—'}")
 
 
 def cmd_doctor(_args):
@@ -1748,6 +1857,12 @@ def main():
                            help=f"中文字号百分比（{SCALE_MIN}–{SCALE_MAX}，默认 100）")
     p_install.add_argument("--scale-latin", type=int, metavar="N",
                            help=f"英文字号百分比（{SCALE_MIN}–{SCALE_MAX}，默认 100）")
+    p_install.add_argument("--mono", metavar="FONT",
+                           help="代码块字体（留空字符串表示不改）")
+    p_install.add_argument("--mono-scale", type=int, metavar="N",
+                           help=f"代码块字号百分比（{SCALE_MIN}–{SCALE_MAX}）")
+    p_install.add_argument("--bg", metavar="#RRGGBB",
+                           help="页面底色（留空字符串表示不改）")
     p_install.add_argument("-y", "--yes", action="store_true",
                            help="所有确认自动回答 yes")
 
