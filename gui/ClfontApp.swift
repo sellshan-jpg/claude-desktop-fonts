@@ -148,7 +148,7 @@ final class Copy: ObservableObject {
         // —— 外观
         "look.group": "外观",
         "look.bg": "页面底色",
-        "look.bg.desc": "把 Claude 的界面底色换成暖色。仅浅色模式生效，深色模式不受影响",
+        "look.bg.desc": "把 Claude 的界面底色换成早期版本的米色。仅在浅色模式生效。",
         "look.bg.off": "不修改",
         "look.bg.custom": "自定",
         "header.lang": "Clfont 的界面语言",
@@ -331,7 +331,7 @@ final class Copy: ObservableObject {
 
         "look.group": "Appearance",
         "look.bg": "Page background",
-        "look.bg.desc": "Warm up Claude's background. Light mode only; dark mode is untouched",
+        "look.bg.desc": "Restore the warm cream background of earlier Claude versions. Light mode only.",
         "look.bg.off": "Unchanged",
         "look.bg.custom": "Custom",
         "header.lang": "Clfont's own interface language",
