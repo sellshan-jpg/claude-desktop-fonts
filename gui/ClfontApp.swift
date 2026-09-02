@@ -40,9 +40,9 @@ final class Copy: ObservableObject {
     /// 中文是基准表；改文案请直接改这里。
     static let zh: [String: String] = [
         // 文案改动请直接改这里；调试版可实时预览，改完由开发者合并回来。
-        "font.mode.desc": "「标准」不生效时再用「扩展」，会多覆盖一批常见字体",
+        "font.mode.desc": "「标准」不生效时再用「扩展」，此时会多覆盖一批常见字体",
         "font.preview.cjk": "字体是沉默的声音",
-        "font.scope.desc": "只换中文最安全；换英文会连同界面文字一起改变",
+        "font.scope.desc": "换英文会连同界面文字一起改变",
         "footer.ops": "安装会先退出该 Claude，全程有完整备份；失败或中途取消都会把文件恢复原样，随时可用「还原」完全撤销。重签名后首次启动可能要求重新授权钥匙串，属正常现象。",
         "footer.safety": "Clfont 仅在本机修改 Claude 的字体渲染：注入内容只有字体规则，不改动任何网络请求，也不读取账号信息与聊天记录。",
         "header.subtitle": "使用 Clfont，在 Claude 里安全地使用你喜欢的中英文字体",
@@ -150,7 +150,7 @@ final class Copy: ObservableObject {
         "font.latin.body": "仅回复",
         "font.latin.all": "全部",
         "font.ui.size": "侧栏和底栏字号优化",
-        "font.ui.desc": "管侧栏、底栏、输入框和你发出的消息。单独拆出来是因为这些位置本身只有 12–13px，跟着正文一起放大只多一个多像素，看不出来",
+        "font.ui.desc": "此选项影响侧栏、底栏和用户发出消息的字号。侧栏和底栏的字号变化幅度较低。",
         "font.mode": "兼容模式",
         "font.mode.std": "标准",
         "font.mode.ext": "扩展",
@@ -294,9 +294,9 @@ final class Copy: ObservableObject {
         "help.safety.b2": "Your account and your conversations are never read or uploaded. Everything happens on this Mac.",
         "help.safety.b3": "A full backup is taken before anything changes. If a step fails or you cancel, the files go back as they were, and Restore undoes everything whenever you like.",
         "help.footer": "Clfont only touches the Claude app bundle you pick. It never reads your account or your conversations.",
-        "font.mode.desc": "Only reach for Extended if Standard misses something",
+        "font.mode.desc": "Only reach for Extended if Standard misses something; it then covers a wider set of font families",
         "font.preview.cjk": "字体是沉默的声音",
-        "font.scope.desc": "Chinese alone is the safe choice; English restyles the interface too",
+        "font.scope.desc": "Replacing English restyles the interface text as well",
         "footer.ops": "Applying quits Claude first and always takes a full backup. If a step fails or you cancel, the files go back as they were, and Restore undoes everything whenever you like. macOS may ask for keychain access the next time Claude starts; that is expected.",
         "footer.safety": "Clfont changes how Claude draws text on this Mac, and nothing else. It injects font rules only: no network request is touched, and your account and conversations are never read.",
         "header.subtitle": "Put the fonts you like into Claude, safely",
@@ -363,7 +363,7 @@ final class Copy: ObservableObject {
         "font.latin.body": "Replies only",
         "font.latin.all": "Everything",
         "font.ui.size": "Sidebar and bottom bar",
-        "font.ui.desc": "Covers the sidebar, the bottom bar, the composer and the messages you send. Split out because these sit at 12–13px, where scaling with the body adds barely a pixel",
+        "font.ui.desc": "Affects the sidebar, the bottom bar and the messages you send. The sidebar and bottom bar shift only slightly.",
         "font.mode": "Compatibility",
         "font.mode.std": "Standard",
         "font.mode.ext": "Extended",
@@ -2059,13 +2059,16 @@ struct ContentView: View {
             Divider().opacity(0.5)
             HStack {
                 Text(title)
-                    .font(.system(size: 11, weight: .semibold))
-                    .tracking(0.6)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 11.5, weight: .bold))
+                    .tracking(0.9)
+                    .foregroundStyle(.primary.opacity(0.62))
                 Spacer()
             }
             .padding(.horizontal, 16)
-            .padding(.top, 11).padding(.bottom, 5)
+            .padding(.vertical, 7)
+            // 一条极淡的底纹带。只靠字重和颜色不够——分组标题夹在一堆等宽
+            // 行里，需要一点面的差异才能一眼扫到。
+            .background(Color.primary.opacity(0.045))
         }
     }
 
