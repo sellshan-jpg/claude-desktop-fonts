@@ -137,7 +137,7 @@ final class Copy: ObservableObject {
 
         // —— 字体设置
         "font.group": "字体",
-        "font.scope": "替换范围",
+        "font.scope": "替换语言",
         "font.scope.cjk": "中文",
         "font.scope.latin": "英文",
         "font.scope.both": "中英文",
@@ -163,7 +163,7 @@ final class Copy: ObservableObject {
         "font.sec.other": "其他",
         "row.font": "字体",
         "row.size": "字号",
-        "row.apply": "作用范围",
+        "row.apply": "替换范围",
 
         // —— 代码块
         "code.group": "代码块",
@@ -212,12 +212,14 @@ final class Copy: ObservableObject {
         "msg.openfail": "✗ 启动测试 Claude 失败：{err}",
 
         // —— 弹层
-        "sheet.apply.title": "确认应用",
-        "sheet.apply.body": "当前选择的目标是「{target}」。应用将修改该应用的字体渲染，全程有完整备份，任一环节失败都会自动恢复原样。",
+        "sheet.apply.title": "确认为正式版 Claude 应用修改",
+        "sheet.apply.body": "当前选择的目标是「{target}」。应用将修改 Claude 的{items}。已备份，如果中途失败，Clfont 会自动使 Claude 恢复原样。",
         "sheet.apply.go": "应用",
+        "item.font": "字体渲染",
+        "item.mono": "代码块字体",
+        "item.bg": "页面底色",
 
-        "sheet.applying.title": "正在应用",
-        "sheet.applying.perm": "首次使用或 Clfont 更新后，系统可能拦截本次修改并显示下方提示。请点击其中的「允许…」。若已错过该提示，可用下方按钮前往设置，为 Clfont 打开开关后重新执行。",
+        "sheet.applying.title": "正在应用中",
         "sheet.applying.hint": "此窗口会在完成后自动关闭，期间请勿关闭应用。",
 
         "sheet.restart.title": "即将重新启动 Claude",
@@ -363,7 +365,7 @@ final class Copy: ObservableObject {
         "detail.keepall": "All needed",
 
         "font.group": "Fonts",
-        "font.scope": "Scope",
+        "font.scope": "Language",
         "font.scope.cjk": "Chinese",
         "font.scope.latin": "English",
         "font.scope.both": "Both",
@@ -389,7 +391,7 @@ final class Copy: ObservableObject {
         "font.sec.other": "OTHER",
         "row.font": "Font",
         "row.size": "Size",
-        "row.apply": "Applies to",
+        "row.apply": "Scope",
 
         "code.group": "Code blocks",
         "code.font": "Code font",
@@ -432,12 +434,14 @@ final class Copy: ObservableObject {
         "msg.opened": "· Test Claude launched (separate profile)",
         "msg.openfail": "✗ Could not launch the test Claude: {err}",
 
-        "sheet.apply.title": "Apply the changes?",
-        "sheet.apply.body": "The selected target is {target}. Applying changes how that app renders text. A full backup is taken first, and any step that fails puts everything back.",
+        "sheet.apply.title": "Apply to your main Claude?",
+        "sheet.apply.body": "The target is {target}. This will change {items}. A backup is taken first, and if anything fails partway Clfont puts Claude back as it was.",
         "sheet.apply.go": "Apply",
+        "item.font": "how text is rendered",
+        "item.mono": "the code block font",
+        "item.bg": "the page background",
 
         "sheet.applying.title": "Applying",
-        "sheet.applying.perm": "On a first run, or after Clfont updates, macOS may block the change and show the notice below. Click Allow. If you missed it, the button underneath opens the right settings page — switch Clfont on there and run this again.",
         "sheet.applying.hint": "This window closes on its own when the work is done. Leave the app running.",
 
         "sheet.restart.title": "Claude is about to restart",
@@ -2265,7 +2269,7 @@ struct ContentView: View {
     private var actions: some View {
         GlassEffectContainer(spacing: 10) {
             HStack(spacing: 10) {
-                Button { confirmApply = true } label: {
+                Button { m.target == .production ? (confirmApply = true) : startApply() } label: {
                     Text(t(m.current.patched ? "action.reapply" : "action.apply",
                          ["{target}": m.target.label]))
                         .font(.system(size: 14, weight: .semibold))
@@ -2650,15 +2654,15 @@ struct ContentView: View {
             scrim { confirmApply = false }
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .top, spacing: 13) {
-                    ZStack {
-                        Circle().fill(DS.accent.opacity(0.16)).frame(width: 34, height: 34)
-                        Image(systemName: "textformat")
-                            .font(.system(size: 15, weight: .medium)).foregroundStyle(DS.accent)
-                    }
+                    // 用目标 Claude 自己的图标，比一个抽象符号更能说明「要改的是它」。
+                    // 从安装位置实时取，不随包分发别人的资源。
+                    Image(nsImage: NSWorkspace.shared.icon(forFile: m.fullPath(m.target)))
+                        .resizable().frame(width: 38, height: 38)
                     VStack(alignment: .leading, spacing: 5) {
                         Text(t("sheet.apply.title"))
                             .font(.system(size: 15, weight: .semibold)).tracking(-0.15)
-                        Text(t("sheet.apply.body", ["{target}": m.target.label]))
+                        Text(t("sheet.apply.body",
+                               ["{target}": m.target.label, "{items}": applyItems]))
                             .font(.system(size: 12.5)).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -2695,28 +2699,11 @@ struct ContentView: View {
                         .font(.system(size: 12)).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                Divider().opacity(0.5)
-                Text(t("sheet.applying.perm"))
-                    .font(.system(size: 12.5)).foregroundStyle(.secondary)
-                    .lineSpacing(2.5)
-                    .fixedSize(horizontal: false, vertical: true)
-                guideImage("permission-alert")
-                Button {
-                    NSWorkspace.shared.open(URL(string:
-                        "x-apple.systempreferences:com.apple.preference.security?Privacy_AppBundles")!)
-                } label: {
-                    Text(t("appmgmt.open"))
-                        .font(.system(size: 13, weight: .medium))
-                        .frame(maxWidth: .infinity).frame(height: 32)
-                }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.capsule)
-
                 Text(t("sheet.applying.hint"))
                     .font(.system(size: 11.5)).foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 24).padding(.top, 22).padding(.bottom, 18)
-            .frame(width: 430)
+            .frame(width: 380)
             .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .shadow(color: .black.opacity(0.3), radius: 25, y: 22)
             .transition(.scale(scale: 0.96).combined(with: .opacity))
@@ -2762,18 +2749,26 @@ struct ContentView: View {
         }
     }
 
-    private func guideImage(_ name: String) -> some View {
-        Group {
-            // 截图本身带透明通道，直接贴上去即可；套边框和底色反而像贴了张卡片
-            if let url = Bundle.main.url(forResource: name, withExtension: "png"),
-               let img = NSImage(contentsOf: url) {
-                Image(nsImage: img).resizable().scaledToFit()
-                    .frame(maxWidth: .infinity)
-            }
-        }
+
+    /// 这次应用会动到哪些东西，按实际选择列出。写死一句「字体和/或底色」等于
+    /// 让用户自己去核对选了什么，不如直接把清单摆出来。
+    private var applyItems: String {
+        var out: [String] = []
+        if !scopeSpecsEmpty { out.append(t("item.font")) }
+        if !m.fontMono.isEmpty { out.append(t("item.mono")) }
+        if !m.bgColor.isEmpty { out.append(t("item.bg")) }
+        if out.isEmpty { return t("item.font") }
+        return out.joined(separator: copy.lang == .en ? ", " : "、")
     }
 
-    /// 应用的完整流程：确认 → 进度（含权限引导）→ 完成后提示并重启 Claude。
+    /// 替换范围对应的字体是否真的选了——两者都空时只改底色或代码块字体
+    private var scopeSpecsEmpty: Bool {
+        let cjk = m.replacesCJK && !m.fontFamily.isEmpty
+        let latin = m.replacesLatin && !m.fontLatin.isEmpty
+        return !cjk && !latin
+    }
+
+    /// 应用的完整流程：确认 → 进度 → 完成后提示并重启 Claude。
     private func startApply() {
         confirmApply = false
         showApplying = true
