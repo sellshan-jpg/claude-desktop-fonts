@@ -2503,9 +2503,17 @@ struct ContentView: View {
 
                         helpSection(t("help.sec.settings"))
                         helpStep(4, t("help.step4.title"), t("help.step4.body")) {
-                            ActionLine(lead: t("font.scope")) {
-                                SegChip(options: [t("font.scope.cjk"), t("font.scope.latin"),
-                                                  t("font.scope.both")], selected: 0)
+                            VStack(alignment: .leading, spacing: 7) {
+                                ActionLine(lead: t("font.scope")) {
+                                    SegChip(options: [t("font.scope.cjk"), t("font.scope.latin"),
+                                                      t("font.scope.both")], selected: 0)
+                                }
+                                // 「替换范围」只在选了英文之后才出现，样例里默认选中
+                                // 「仅回复」——正文里推荐的就是它。
+                                ActionLine(lead: t("row.apply")) {
+                                    SegChip(options: [t("font.latin.body"), t("font.latin.all")],
+                                            selected: 0)
+                                }
                             }
                         }
 
