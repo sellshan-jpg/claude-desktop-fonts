@@ -104,6 +104,10 @@ final class Copy: ObservableObject {
         "header.help": "如何使用",
         "target.prod": "正式 Claude",
         "target.test": "测试 Claude",
+        "target.custom": "其他位置",
+        "target.choose": "选择其他位置",
+        "target.forget": "移出列表",
+        "target.choose.msg": "选择需要修改的 Claude.app",
         "target.none": "尚未创建，点击右上角创建",
         "target.title": "选择需要修改的 Claude 版本",
         "target.create": "创建测试 Claude",
@@ -137,6 +141,9 @@ final class Copy: ObservableObject {
 
         // —— 字体设置
         "font.group": "字体",
+        "preset.label": "推荐组合",
+        "preset.desc": "宋体 105%，配早期版本的米色底。点击后仍需执行「应用」",
+        "preset.classic": "Claude 经典",
         "font.scope": "替换语言",
         "font.scope.cjk": "中文",
         "font.scope.latin": "英文",
@@ -183,6 +190,7 @@ final class Copy: ObservableObject {
         "look.bg.light": "浅米",
         "look.bg.grey": "米灰",
         "look.bg.blue": "淡蓝",
+        "look.bg.darknow": "当前系统为深色模式，此设置暂不生效。切换到浅色模式后即会显示。",
         "look.bg.toodark": "该底色过深，正文将难以辨认。Clfont 仅支持修改底色、无法修改文字颜色，因此 Clfont 将会跳过此次底色设置。请选择更浅的颜色。",
         "header.lang": "Clfont 的界面语言",
 
@@ -192,6 +200,7 @@ final class Copy: ObservableObject {
         "action.doctor": "自检",
         "action.open": "打开",
         "action.restore": "还原",
+        "action.unapplied": "设置已更改，点击「应用」后才会生效",
 
         // —— 日志
         "log.show": "显示日志（{n}）",
@@ -337,6 +346,10 @@ final class Copy: ObservableObject {
         "header.help": "How to use",
         "target.prod": "Main Claude",
         "target.test": "Test Claude",
+        "target.custom": "Other location",
+        "target.choose": "Choose another",
+        "target.forget": "Remove from list",
+        "target.choose.msg": "Choose the Claude.app to change",
         "target.none": "Not created yet — use the button above",
         "target.title": "Which Claude to change",
         "target.create": "Create test Claude",
@@ -368,6 +381,9 @@ final class Copy: ObservableObject {
         "detail.keepall": "All needed",
 
         "font.group": "Fonts",
+        "preset.label": "Preset",
+        "preset.desc": "Songti at 105% on the cream background of earlier versions. You still need to apply it",
+        "preset.classic": "Claude Classic",
         "font.scope": "Language",
         "font.scope.cjk": "Chinese",
         "font.scope.latin": "English",
@@ -412,6 +428,7 @@ final class Copy: ObservableObject {
         "look.bg.light": "Light",
         "look.bg.grey": "Greige",
         "look.bg.blue": "Pale blue",
+        "look.bg.darknow": "Your Mac is in dark mode, so this setting has no effect right now. Switch to light mode to see it.",
         "look.bg.toodark": "This background is too dark to read dark text against. Clfont can change the background but not the text colour, so it will skip the background this time. Pick something lighter.",
         "header.lang": "Clfont's own interface language",
 
@@ -420,6 +437,7 @@ final class Copy: ObservableObject {
         "action.doctor": "Diagnose",
         "action.open": "Open",
         "action.restore": "Restore",
+        "action.unapplied": "Settings changed. They take effect once you apply",
 
         "log.show": "Show log ({n})",
         "log.hide": "Hide log",
@@ -582,6 +600,13 @@ extension Color {
                   green: Double((hex >> 8) & 0xFF) / 255,
                   blue: Double(hex & 0xFF) / 255)
     }
+}
+
+/// 「Claude 经典」：宋体 105% 配早期版本的米色底。
+enum ClassicPreset {
+    static let font = "Songti SC"
+    static let scale = 105.0
+    static let bg = "#F0EEE6"
 }
 
 enum DS {
@@ -775,6 +800,8 @@ enum CLIMarker {
     static let backups = "整包备份："
     static let none = "无"
     static let font = "字体 "
+    static let mono = "代码块字体 "
+    static let bg = "页面底色 "
     static let totalPrefix = "合计 "
     static let totalMid = "），其中"
     static let prunablePrefix = "其中 "
@@ -786,10 +813,24 @@ enum CLIMarker {
 // MARK: - 目标
 
 enum Target: String, CaseIterable, Identifiable {
-    case production, testCopy
+    /// custom 用于装在非默认位置的 Claude（例如 ~/Applications）。CLI 一直支持
+    /// --app 任意路径，此前只有界面把目标写死成两个。
+    case production, testCopy, custom
     var id: String { rawValue }
-    var label: String { t(self == .production ? "target.prod" : "target.test") }
-    var tint: Color { self == .production ? DS.prod : DS.test }
+    var label: String {
+        switch self {
+        case .production: return t("target.prod")
+        case .testCopy: return t("target.test")
+        case .custom: return t("target.custom")
+        }
+    }
+    var tint: Color {
+        switch self {
+        case .production: return DS.prod
+        case .testCopy: return DS.test
+        case .custom: return DS.accent
+        }
+    }
 }
 
 /// 测试副本相关路径。放在 Application Support 下，与用户数据同区。
@@ -815,7 +856,11 @@ struct AppStatus {
     /// 嵌套 Helper 的权限是否完整（旧版重签名会把它抹掉，Cowork 等功能会失效）
     var helperOK = true
     var backups: [String] = []
+    /// 以下三项是**已应用**的设置，来自 CLI 的 status 输出；
+    /// 界面上的滑块反映的是「当前选择」，两者可能不一致。
     var font = ""
+    var mono = ""
+    var bg = ""
     var checkedAt = ""
     var raw = ""
 }
@@ -921,6 +966,38 @@ final class OutputBox: @unchecked Sendable {
     /// 不做启动时的主动探测——那需要真的去写一次 Claude，会在用户还没提出
     /// 任何要求时就弹出系统授权请求。等到操作真的失败再提示，时机才对。
     @Published var appMgmtDenied = false
+
+    /// 上次应用时的设置。界面上的控件反映的是「当前选择」，改了之后不点应用
+    /// 是不会生效的——此前界面对此毫无提示，改完看 Claude 没变才想起来。
+    @Published private(set) var appliedSnapshot: [String: String] = [:]
+
+    /// 非默认位置的 Claude。留空表示没设过，此时不显示第三张卡片。
+    @Published var customAppPath: String = UserDefaults.standard
+        .string(forKey: "customAppPath") ?? "" {
+        didSet { UserDefaults.standard.set(customAppPath, forKey: "customAppPath") }
+    }
+
+    var settingsSnapshot: [String: String] {
+        ["scope": scope, "mode": mode, "latinScope": latinScope,
+         "font": fontFamily, "fontScale": String(Int(fontScale.rounded())),
+         "latin": fontLatin, "latinScale": String(Int(fontScaleLatin.rounded())),
+         "mono": fontMono, "monoScale": String(Int(fontMonoScale.rounded())),
+         "uiScale": String(Int(fontScaleUI.rounded())), "bg": bgColor]
+    }
+
+    var hasUnapplied: Bool {
+        !appliedSnapshot.isEmpty && settingsSnapshot != appliedSnapshot
+    }
+
+    func markApplied() { appliedSnapshot = settingsSnapshot }
+
+    var matchesClassicPreset: Bool {
+        scope == "cjk" && fontFamily == ClassicPreset.font
+            && Int(fontScale.rounded()) == Int(ClassicPreset.scale)
+            && bgColor.uppercased() == ClassicPreset.bg
+            && fontMono.isEmpty && Int(fontScaleUI.rounded()) == 100
+            && mode == "auto"
+    }
     @Published var fonts: [FontChoice] = []
     @Published var latinFonts: [FontChoice] = []
     @Published var monoFonts: [FontChoice] = []
@@ -939,11 +1016,16 @@ final class OutputBox: @unchecked Sendable {
     var current: AppStatus { statuses[target] ?? AppStatus() }
 
     /// nil = 用 CLI 的默认目标（/Applications/Claude.app）
+    /// 传给 CLI 的 --app。正式版是 CLI 的默认目标，不必传。
     func cliPath(_ tgt: Target) -> String? {
-        tgt == .production ? nil : Paths.testApp
+        tgt == .production ? nil : fullPath(tgt)
     }
     func fullPath(_ tgt: Target) -> String {
-        tgt == .production ? "/Applications/Claude.app" : Paths.testApp
+        switch tgt {
+        case .production: return "/Applications/Claude.app"
+        case .testCopy: return Paths.testApp
+        case .custom: return customAppPath
+        }
     }
     func exists(_ tgt: Target) -> Bool {
         FileManager.default.fileExists(atPath: fullPath(tgt))
@@ -1008,6 +1090,7 @@ final class OutputBox: @unchecked Sendable {
         bgColor = j["bg_color"] as? String ?? bgColor
         latinScope = j["latin_scope"] as? String ?? latinScope
         fontScaleUI = (j["font_scale_ui"] as? NSNumber)?.doubleValue ?? fontScaleUI
+        markApplied()
     }
 
     func saveConfig() {
@@ -1120,6 +1203,13 @@ final class OutputBox: @unchecked Sendable {
                     .trimmingCharacters(in: .whitespaces)
                 s.backups = line == CLIMarker.none ? [] : line.components(separatedBy: "、")
             }
+            for (marker, keyPath) in [(CLIMarker.mono, \AppStatus.mono),
+                                       (CLIMarker.bg, \AppStatus.bg)] {
+                guard let r = out.range(of: marker) else { continue }
+                let v = String(out[r.upperBound...].prefix { $0 != "，" && !$0.isNewline })
+                    .trimmingCharacters(in: .whitespaces)
+                s[keyPath: keyPath] = (v == CLIMarker.none || v == "—") ? "" : v
+            }
             if let r = out.range(of: CLIMarker.font) {
                 var f = String(out[r.upperBound...].prefix { $0 != "，" && !$0.isNewline })
                 // CLI 会在字体名后带上字号，形如「Songti SC（110%）」。标题里
@@ -1213,6 +1303,7 @@ final class OutputBox: @unchecked Sendable {
             [weak self] code, out in
             self?.noteAppMgmt(out)
             self?.refresh(tgt)
+            if code == 0 { self?.markApplied() }
             done?(code == 0)
         }
     }
@@ -1501,6 +1592,9 @@ struct ContentView: View {
     @State private var showHelp = false
     @State private var showWhatsNew = false
     @StateObject private var updates = UpdateWatcher()
+    /// 底色只在浅色模式生效。此刻正处于深色模式的话，用户选完、应用完什么都
+    /// 不会发生——文案里写了「仅在浅色模式生效」也不够，得当场说。
+    @Environment(\.colorScheme) private var colorScheme
     /// 切换界面语言要让整个界面重画，所以正式版也观察它
     @ObservedObject private var copy = Copy.shared
 #if CLFONT_DEBUG
@@ -1856,6 +1950,10 @@ struct ContentView: View {
                               value: s.backups.isEmpty ? t("detail.none")
                                                       : t("detail.count", ["{n}": String(s.backups.count)]))
                     DetailRow(label: t("detail.disk"), value: m.diskFree)
+                    DetailRow(label: t("code.font"),
+                              value: s.mono.isEmpty ? t("code.keep") : s.mono)
+                    DetailRow(label: t("look.bg"),
+                              value: s.bg.isEmpty ? t("look.bg.off") : s.bg)
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 12).padding(.bottom, 10)
@@ -1927,10 +2025,32 @@ struct ContentView: View {
                         .font(.system(size: 12)).foregroundStyle(DS.danger)
                         .disabled(m.busy)
                 }
+                if m.target == .custom {
+                    Text("·").font(.system(size: 12)).foregroundStyle(.tertiary)
+                    Button(t("target.forget")) {
+                        withAnimation(DS.ease) {
+                            if m.target == .custom { m.target = .production }
+                            m.customAppPath = ""
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12)).foregroundStyle(DS.danger)
+                    .disabled(m.busy)
+                } else if m.customAppPath.isEmpty {
+                    Text("·").font(.system(size: 12)).foregroundStyle(.tertiary)
+                    Button(t("target.choose")) { chooseCustomApp() }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 12)).foregroundStyle(DS.accent)
+                        .disabled(m.busy)
+                }
             }
             HStack(spacing: 10) {
                 targetTile(.production)
                 targetTile(.testCopy)
+            }
+            if !m.customAppPath.isEmpty {
+                targetTile(.custom)
+                    .transition(DS.rowInsert)
             }
             Text(t("target.hint"))
                 .font(.system(size: 11.5)).foregroundStyle(.secondary)
@@ -1995,6 +2115,48 @@ struct ContentView: View {
     }
 
     // MARK: 字体
+
+    private func presetLabel(checked: Bool) -> some View {
+        HStack(spacing: 5) {
+            if checked {
+                Image(systemName: "checkmark").font(.system(size: 10, weight: .bold))
+            }
+            Text(t("preset.classic")).font(.system(size: 13, weight: .medium))
+        }
+        .frame(height: 28).padding(.horizontal, 14)
+    }
+
+    /// 选择装在别处的 Claude。CLI 一直支持任意路径，这里只是补一个入口。
+    private func chooseCustomApp() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowedContentTypes = [.applicationBundle]
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.message = t("target.choose.msg")
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        withAnimation(DS.ease) {
+            m.customAppPath = url.path
+            m.target = .custom
+        }
+        m.refresh(.custom)
+    }
+
+    /// 一键套用「Claude 经典」。给的是完整状态而不是若干项叠加——否则同一个
+    /// 按钮在不同的既有设置下会得到不同结果。
+    private func applyClassicPreset() {
+        withAnimation(DS.pop) {
+            m.scope = "cjk"
+            m.fontFamily = ClassicPreset.font
+            m.fontScale = ClassicPreset.scale
+            m.bgColor = ClassicPreset.bg
+            m.fontMono = ""
+            m.fontMonoScale = 100
+            m.fontScaleUI = 100
+            m.latinScope = "all"
+            m.mode = "auto"
+        }
+    }
 
     /// 字号行。用 size-adjust 实现，所以调的是「被替换的那些字符显示多大」，
     /// 不是整页缩放——图标、间距、未替换的文字都不动。
@@ -2113,6 +2275,20 @@ struct ContentView: View {
                 // 取色器可以选到任意颜色，而我们只改背景、不改文字色。选到深色
                 // 就不是「不好看」而是读不了，必须当场说，不能等应用完才发现
                 // 被跳过了。判据与 CLI 是同一套。
+                if !m.bgColor.isEmpty && colorScheme == .dark {
+                    Divider().opacity(0.5)
+                    HStack(alignment: .top, spacing: 9) {
+                        Image(systemName: "moon.fill")
+                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                        Text(t("look.bg.darknow"))
+                            .font(.system(size: 12)).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.horizontal, 16).padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .transition(DS.rowInsert)
+                }
+
                 if !m.bgColor.isEmpty && !bgReadable(m.bgColor) {
                     Divider().opacity(0.5)
                     HStack(alignment: .top, spacing: 9) {
@@ -2190,6 +2366,33 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 7) {
             GroupLabel(text: t("font.group"))
             VStack(spacing: 0) {
+                // 十个设置项对新用户太多。给一个完整、可复现的组合作为起点：
+                // 点一下就是一套确定的状态，不受此前设置影响。
+                HStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(t("preset.label")).font(.system(size: 14))
+                        Text(t("preset.desc"))
+                            .font(.system(size: 12)).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer()
+                    // 已经是这套设置时按钮转为普通样式并打勾：既是入口也是状态
+                    Group {
+                        if m.matchesClassicPreset {
+                            Button { applyClassicPreset() } label: { presetLabel(checked: true) }
+                                .buttonStyle(.glass)
+                        } else {
+                            Button { applyClassicPreset() } label: { presetLabel(checked: false) }
+                                .buttonStyle(.glassProminent)
+                        }
+                    }
+                    .buttonBorderShape(.capsule)
+                    .tint(DS.prod)
+                }
+                .padding(.horizontal, 16).padding(.vertical, 11)
+
+                Divider().opacity(0.5)
+
                 HStack(spacing: 16) {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(t("font.scope")).font(.system(size: 14))
@@ -2338,6 +2541,21 @@ struct ContentView: View {
     // MARK: 按钮行
 
     private var actions: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            if m.hasUnapplied && m.current.patched {
+                HStack(spacing: 7) {
+                    Circle().fill(DS.prod).frame(width: 6, height: 6)
+                    Text(t("action.unapplied"))
+                        .font(.system(size: 12)).foregroundStyle(DS.prod)
+                }
+                .transition(.opacity)
+            }
+            actionsRow
+        }
+        .animation(DS.ease, value: m.hasUnapplied)
+    }
+
+    private var actionsRow: some View {
         GlassEffectContainer(spacing: 10) {
             HStack(spacing: 10) {
                 Button { m.target == .production ? (confirmApply = true) : startApply() } label: {
