@@ -182,7 +182,8 @@ final class Copy: ObservableObject {
         "look.bg.classic": "经典",
         "look.bg.light": "浅米",
         "look.bg.grey": "米灰",
-        "look.bg.toodark": "该底色过深，正文将难以辨认。本工具只改背景、不改文字颜色，因此应用时会跳过底色设置。请选择更浅的颜色。",
+        "look.bg.blue": "淡蓝",
+        "look.bg.toodark": "该底色过深，正文将难以辨认。Clfont 仅支持修改底色、无法修改文字颜色，因此 Clfont 将会跳过此次底色设置。请选择更浅的颜色。",
         "header.lang": "Clfont 的界面语言",
 
         // —— 按钮
@@ -410,7 +411,8 @@ final class Copy: ObservableObject {
         "look.bg.classic": "Classic",
         "look.bg.light": "Light",
         "look.bg.grey": "Greige",
-        "look.bg.toodark": "This background is too dark to read dark text against. Clfont changes the background only, never the text colour, so the background will be skipped when you apply. Pick something lighter.",
+        "look.bg.blue": "Pale blue",
+        "look.bg.toodark": "This background is too dark to read dark text against. Clfont can change the background but not the text colour, so it will skip the background this time. Pick something lighter.",
         "header.lang": "Clfont's own interface language",
 
         "action.apply": "Apply to {target}",
@@ -2066,6 +2068,7 @@ struct ContentView: View {
         ("#F0EEE6", "look.bg.classic"),
         ("#F7F4EC", "look.bg.light"),
         ("#F2F1EC", "look.bg.grey"),
+        ("#E9F1F7", "look.bg.blue"),
     ]
 
     private var lookGroup: some View {
@@ -2093,6 +2096,23 @@ struct ContentView: View {
                 }
                 .padding(.horizontal, 16).padding(.vertical, 11)
 
+                // 取色器可以选到任意颜色，而我们只改背景、不改文字色。选到深色
+                // 就不是「不好看」而是读不了，必须当场说，不能等应用完才发现
+                // 被跳过了。判据与 CLI 是同一套。
+                if !m.bgColor.isEmpty && !bgReadable(m.bgColor) {
+                    Divider().opacity(0.5)
+                    HStack(alignment: .top, spacing: 9) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 12)).foregroundStyle(DS.danger)
+                        Text(t("look.bg.toodark"))
+                            .font(.system(size: 12)).foregroundStyle(DS.danger)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.horizontal, 16).padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(DS.danger.opacity(0.07))
+                    .transition(DS.rowInsert)
+                }
             }
             .glassEffect(.regular, in: DS.card)
         }
