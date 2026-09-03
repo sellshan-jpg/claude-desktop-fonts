@@ -79,7 +79,9 @@ func srcs(_ cfg: Config, _ key: String = "font") -> (String, String) {
     var reg = cfg.raw[key + "_regular"] as? String
     var bold = cfg.raw[key + "_bold"] as? String
     if key == "font", (reg ?? "").isEmpty, (bold ?? "").isEmpty, name == "Songti SC" {
-        reg = "STSongti-SC-Regular"; bold = "STSongti-SC-Bold"
+        // 粗体取 Black 而不是 Bold：宋体的 Bold 只比 Regular 多 16% 墨量，
+        // 正文里分不出粗细；Black 多 41%。GUI 的 strongerBold 得到同样结论。
+        reg = "STSongti-SC-Regular"; bold = "STSongti-SC-Black"
     }
     let regList: [String?] = [reg] + fonts.map { Optional($0) }
     let boldList: [String?] = [(bold?.isEmpty == false) ? bold : reg] + fonts.map { Optional($0) }

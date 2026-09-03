@@ -517,6 +517,31 @@ def test_latin_scope_body_skips_ui_family():
 
 
 @test
+def test_songti_bold_falls_back_to_black():
+    """宋体的粗体兜底必须是 Black，不是 Bold。
+
+    宋体 SC 的 Bold 只比 Regular 多 16% 墨量，正文里几乎分不出粗细——这正是
+    「Claude 经典」下用户反馈粗体不明显的原因；Black 多 41%，才认得出。
+    GUI 侧由 FontScanner.strongerBold 按实测墨量挑（阈值 1.30×，只有宋体和
+    楷体会被判为过弱），这里守的是 GUI 没写过字面名时的兜底。"""
+    M.set_app("/tmp/x.app")
+    cfg = dict(M.DEFAULT_CONFIG, scope="cjk", font="Songti SC")
+    cfg.pop("font_regular", None)
+    cfg.pop("font_bold", None)
+    css = M.build_css("auto", cfg)
+    bold_faces = [f for f in re.findall(r'@font-face\{[^}]*\}', css)
+                  if "font-weight:501 900" in f]
+    ok(bold_faces, "应当有粗体字面")
+    for f in bold_faces:
+        contains(f, 'local("STSongti-SC-Black")', "粗体应回退到 Black")
+        ok('local("STSongti-SC-Bold")' not in f, "粗体不该用太弱的 Bold")
+    reg_faces = [f for f in re.findall(r'@font-face\{[^}]*\}', css)
+                 if "font-weight:100 500" in f]
+    for f in reg_faces:
+        contains(f, 'local("STSongti-SC-Regular")', "常规仍应是 Regular")
+
+
+@test
 def test_never_declares_faces_for_page_webfont_families():
     """绝不给 anthropic-sans / anthropic-serif 追加 @font-face。
 

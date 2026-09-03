@@ -896,6 +896,74 @@ enum FontScanner {
             .filter { mono.contains($0.family) }
     }
 
+    /// 粗体至少要比正文重多少墨量，才算读者认得出的粗体。
+    ///
+    /// 实测（16px，中文用「中文汉国」、西文用 Hamburgefonstiv）：
+    ///   宋体 1.16×   楷体 1.23×   黑体-简 1.27×   苹方 1.34×   圆体 1.35×
+    ///   Times 1.36×  Menlo 1.39×  Helvetica Neue 1.42×  Georgia 1.51×
+    /// 1.30 这条线只把宋体和楷体判为过弱，其余一概不动。
+    private static let boldMinRatio = 1.30
+
+    /// 把一段探针文字画进灰度位图，返回总墨量。用原始 bitmapData 求和，
+    /// 不用 colorAt——后者每像素分配一个 NSColor，慢两个数量级。
+    private static func ink(_ postscript: String, _ probe: String) -> Double? {
+        guard let f = NSFont(name: postscript, size: 16) else { return nil }
+        let w = 260, h = 30
+        guard let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: w, pixelsHigh: h, bitsPerSample: 8,
+            samplesPerPixel: 1, hasAlpha: false, isPlanar: false,
+            colorSpaceName: .deviceWhite, bytesPerRow: w, bitsPerPixel: 8) else { return nil }
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        guard let ctx = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
+        NSGraphicsContext.current = ctx
+        NSColor.white.setFill()
+        NSRect(x: 0, y: 0, width: w, height: h).fill()
+        (probe as NSString).draw(at: NSPoint(x: 2, y: 5),
+                                 withAttributes: [.font: f, .foregroundColor: NSColor.black])
+        ctx.flushGraphics()
+        guard let px = rep.bitmapData else { return nil }
+        var sum = 0.0
+        for i in 0 ..< (w * h) { sum += Double(255 - Int(px[i])) }
+        return sum
+    }
+
+    private static var boldCache: [String: String?] = [:]
+
+    /// 名义粗体不够重时，在同族里往上找一档。
+    ///
+    /// 宋体 SC 的 Bold 只比 Regular 多 16% 墨量，正文里几乎分不出粗细——用户
+    /// 反馈的「粗体不明显」就是这个。同族的 Black 多 41%，才认得出。楷体同理
+    /// （1.23× → Black 1.51×）。所以只在名义粗体低于 boldMinRatio 时才换，
+    /// 换的时候取**够到阈值的最轻那一档**，不为了更粗而更粗：Avenir Next 的
+    /// 名义 Bold 已经 1.86×，不会被降到 DemiBold 的 1.50×。
+    /// 同族没有更重的字面时（宋体-繁、黑体-简）保持原样——没得选。
+    static func strongerBold(family: String, regular: String,
+                             nominal: String?, probe: String) -> String? {
+        if let hit = boldCache[family] { return hit }
+        let picked = computeBold(family: family, regular: regular,
+                                 nominal: nominal, probe: probe)
+        boldCache[family] = picked
+        return picked
+    }
+
+    private static func computeBold(family: String, regular: String,
+                                    nominal: String?, probe: String) -> String? {
+        guard let ri = ink(regular, probe), ri > 0 else { return nominal }
+        if let nominal, let bi = ink(nominal, probe), bi / ri >= boldMinRatio {
+            return nominal
+        }
+        var best: (name: String, ratio: Double)?
+        for m in NSFontManager.shared.availableMembers(ofFontFamily: family) ?? [] {
+            guard let ps = m[0] as? String else { continue }
+            let traits = NSFontTraitMask(rawValue: (m[3] as? UInt) ?? 0)
+            if traits.contains(.italicFontMask) { continue }
+            guard let i = ink(ps, probe), i / ri >= boldMinRatio else { continue }
+            if best == nil || i / ri < best!.ratio { best = (ps, i / ri) }
+        }
+        return best?.name ?? nominal
+    }
+
     static func latinFamilies() -> [FontChoice] {
         families(covering: ["A", "a", "0", "?"],
                  preferred: ["Helvetica Neue", "Avenir Next", "Georgia", "Palatino",
@@ -1073,7 +1141,14 @@ final class OutputBox: @unchecked Sendable {
     }
 
     func fontChoice(_ family: String) -> FontChoice? {
-        (fonts + latinFonts + monoFonts).first { $0.family == family }
+        guard let c = (fonts + latinFonts + monoFonts).first(where: { $0.family == family })
+        else { return nil }
+        guard let reg = c.regular else { return c }
+        // 探针必须是该族一定有的字形：扫描时就是按这些字筛出来的。
+        let probe = fonts.contains { $0.family == family } ? "中文汉国" : "Hamburgefonstiv"
+        return FontChoice(family: c.family, localized: c.localized, regular: reg,
+                          bold: FontScanner.strongerBold(family: family, regular: reg,
+                                                         nominal: c.bold, probe: probe))
     }
 
     func loadConfig() {

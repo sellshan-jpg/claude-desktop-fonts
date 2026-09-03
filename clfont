@@ -610,8 +610,11 @@ def _srcs(cfg, key="font"):
         fonts += list(cfg.get("fallback_fonts", []))
     reg = cfg.get(key + "_regular")
     bold = cfg.get(key + "_bold")
+    # GUI 没写过字面名时的兜底。粗体取 Black 而不是 Bold：宋体的 Bold 只比
+    # Regular 多 16% 墨量，正文里分不出粗细；Black 多 41%，才认得出。
+    # GUI 走 FontScanner.strongerBold 得到同样的结论。
     if key == "font" and not reg and not bold and name == "Songti SC":
-        reg, bold = "STSongti-SC-Regular", "STSongti-SC-Bold"
+        reg, bold = "STSongti-SC-Regular", "STSongti-SC-Black"
     return _locs([reg] + fonts), _locs([bold or reg] + fonts)
 
 
