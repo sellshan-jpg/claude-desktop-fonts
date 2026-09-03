@@ -206,15 +206,18 @@ func backgroundCSS(_ cfg: Config) -> String {
         return ""
     }
     func mix(_ pct: Int) -> String { "color-mix(in srgb, \(color) \(pct)%, #ffffff)" }
+    // 各层的抬升幅度照原版来：原版 surface-0/1/2 是 #f9f9f7 / #fcfcfb / #ffffff，
+    // 彼此只差 3 到 6 个色阶。早先按 60% / 30% 混白，换成米色底之后输入框那块
+    // 七成是白的，压在米色页面上明显跳出来。
     let pairs: [(String, String)] = [
         ("--cds-surface-0", color),
         ("--cds-page-bg", color),
         ("--background-color-page", color),
-        ("--cds-surface-1", mix(60)),
-        ("--cds-surface-2", mix(30)),
-        ("--cds-surface-3", mix(30)),
-        ("--cds-surface-panel", mix(30)),
-        ("--cds-surface-popover", mix(30)),
+        ("--cds-surface-1", mix(92)),
+        ("--cds-surface-2", mix(85)),
+        ("--cds-surface-3", mix(85)),
+        ("--cds-surface-panel", mix(85)),
+        ("--cds-surface-popover", mix(85)),
     ]
     let body = pairs.map { "\($0.0):\($0.1) !important;" }.joined()
     return ":root[data-mode=\"light\"],.cds-root[data-mode=\"light\"]{\(body)}"

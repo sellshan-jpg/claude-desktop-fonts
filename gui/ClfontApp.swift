@@ -1103,7 +1103,12 @@ final class OutputBox: @unchecked Sendable {
                 s.backups = line == CLIMarker.none ? [] : line.components(separatedBy: "、")
             }
             if let r = out.range(of: CLIMarker.font) {
-                s.font = String(out[r.upperBound...].prefix { $0 != "，" && !$0.isNewline })
+                var f = String(out[r.upperBound...].prefix { $0 != "，" && !$0.isNewline })
+                // CLI 会在字体名后带上字号，形如「Songti SC（110%）」。标题里
+                // 只留字体名：现在有中文/英文/代码块/界面四个字号，孤零零一个
+                // 百分比不说是哪个，反而让人看不懂。
+                if let i = f.firstIndex(of: "（") { f = String(f[..<i]) }
+                s.font = f.trimmingCharacters(in: .whitespaces)
             }
             let f = DateFormatter(); f.dateFormat = "HH:mm"
             s.checkedAt = f.string(from: Date())

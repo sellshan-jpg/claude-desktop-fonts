@@ -756,11 +756,11 @@ def background_css(cfg):
         ("--cds-surface-0", color),
         ("--cds-page-bg", color),
         ("--background-color-page", color),
-        ("--cds-surface-1", mix(60)),
-        ("--cds-surface-2", mix(30)),
-        ("--cds-surface-3", mix(30)),
-        ("--cds-surface-panel", mix(30)),
-        ("--cds-surface-popover", mix(30)),
+        ("--cds-surface-1", mix(92)),
+        ("--cds-surface-2", mix(85)),
+        ("--cds-surface-3", mix(85)),
+        ("--cds-surface-panel", mix(85)),
+        ("--cds-surface-popover", mix(85)),
     ))
     return (
         f':root[data-mode="light"],.cds-root[data-mode="light"]{{{body}}}'
