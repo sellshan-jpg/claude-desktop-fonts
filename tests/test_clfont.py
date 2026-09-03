@@ -561,6 +561,40 @@ def test_cjk_families_are_wired_to_the_right_variables():
     contains(css, '--font-anthropic-sans:"ClaudeCJKSerifUI"', "界面变量应指向界面族")
 
 
+@test
+def test_background_rejects_unreadable_colors():
+    """底色过深必须挡下。
+
+    我们只改背景、不改文字色，正文色接近纯黑。实测深灰 #555555 与正文的对比度
+    只有 2.6、纯黑 1.1——那不是「不好看」，是读不了。而取色器允许选任意颜色，
+    没有下限的话用户一点就把界面弄坏了。"""
+    M.set_app("/tmp/x.app")
+
+    def injects(hex_color):
+        css = M.background_css(dict(M.DEFAULT_CONFIG, bg_color=hex_color))
+        return "--cds-surface-0" in css
+
+    for good in ["#F0EEE6", "#F7F4EC", "#F2F1EC", "#FFFFFF", "#E3F0FA"]:
+        ok(injects(good), f"{good} 是浅色，应当注入")
+    for bad in ["#555555", "#000000", "#FF0000", "#2C3E50"]:
+        ok(not injects(bad), f"{bad} 过深，应当挡下")
+
+
+@test
+def test_background_layers_stay_close():
+    """底色各层之间只能差几个色阶。
+
+    原版 surface-0/1/2 是 #f9f9f7 / #fcfcfb / #ffffff，差的是绝对色阶而非
+    比例。早先按比例混白，换成米色底后输入框那层七成是白的，压在米色页面上
+    形成明显断层。"""
+    M.set_app("/tmp/x.app")
+    import re as _re
+    css = M.background_css(dict(M.DEFAULT_CONFIG, bg_color="#F0EEE6"))
+    pcts = sorted({int(x) for x in _re.findall(r"#F0EEE6 (\d+)%", css)})
+    ok(pcts and min(pcts) >= 80,
+       f"各层混白比例不得低于 80%%，否则会出现断层；实际 {pcts}")
+
+
 # ------------------------------------------------- Python / Swift 两版一致性
 #
 # Swift 重写的验收标准：同样的输入，两版输出必须一致。没编译 Swift 版就跳过。
@@ -606,6 +640,8 @@ PARITY_CASES = [
     {"scope": "both", "font": "Songti SC", "font_latin": "Georgia",
      "font_scale": 110, "font_scale_ui": 130},
     {"scope": "cjk", "font": "Songti SC", "font_scale_ui": 85},
+    {"scope": "cjk", "font": "Songti SC", "bg_color": "#555555"},
+    {"scope": "cjk", "font": "Songti SC", "bg_color": "#E3F0FA"},
     {"scope": "both", "font": "Songti SC", "font_latin": "Georgia",
      "latin_scope": "body", "font_scale_latin": 110},
 ]

@@ -182,6 +182,7 @@ final class Copy: ObservableObject {
         "look.bg.classic": "经典",
         "look.bg.light": "浅米",
         "look.bg.grey": "米灰",
+        "look.bg.toodark": "该底色过深，正文将难以辨认。本工具只改背景、不改文字颜色，因此应用时会跳过底色设置。请选择更浅的颜色。",
         "header.lang": "Clfont 的界面语言",
 
         // —— 按钮
@@ -409,6 +410,7 @@ final class Copy: ObservableObject {
         "look.bg.classic": "Classic",
         "look.bg.light": "Light",
         "look.bg.grey": "Greige",
+        "look.bg.toodark": "This background is too dark to read dark text against. Clfont changes the background only, never the text colour, so the background will be skipped when you apply. Pick something lighter.",
         "header.lang": "Clfont's own interface language",
 
         "action.apply": "Apply to {target}",
@@ -546,6 +548,20 @@ func t(_ key: String, _ subs: [String: String]) -> String {
 }
 
 // MARK: - 设计 tokens
+
+/// 底色是否够浅。判据与 CLI 一致：我们只改背景、不改文字色，正文接近纯黑，
+/// 选到深色就不是「不好看」而是「读不了」。7.0 是 WCAG 的 AAA 门槛。
+func bgReadable(_ hex: String) -> Bool {
+    guard hex.count == 7, hex.hasPrefix("#") else { return true }
+    let h = Array(hex.dropFirst())
+    func ch(_ i: Int) -> Double {
+        let raw = Double(UInt8(String(h[i...(i + 1)]), radix: 16) ?? 0) / 255
+        return raw <= 0.03928 ? raw / 12.92 : pow((raw + 0.055) / 1.055, 2.4)
+    }
+    let lum = 0.2126 * ch(0) + 0.7152 * ch(2) + 0.0722 * ch(4)
+    let textLum = 0.0033      // #0B0B0B 的相对亮度
+    return (max(lum, textLum) + 0.05) / (min(lum, textLum) + 0.05) >= 7.0
+}
 
 extension Color {
     /// 转成 #RRGGBB。ColorPicker 给的是显示色域的颜色，先转 sRGB 再取分量，
@@ -1577,6 +1593,7 @@ struct ContentView: View {
         .animation(DS.ease24, value: m.target)
         .animation(DS.pop, value: m.scope)
         .animation(DS.pop, value: m.latinScope)
+        .animation(DS.ease24, value: m.bgColor)
         .onChange(of: m.target) { _, t in
             if detailOpen { m.loadBackups(t) }   // 有缓存就直接用，不再扫盘
         }

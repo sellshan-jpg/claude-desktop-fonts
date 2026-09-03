@@ -192,6 +192,34 @@ func monoCSS(_ cfg: Config) -> String {
 
 private let hexRE = try! NSRegularExpression(pattern: "^#[0-9A-Fa-f]{6}$")
 
+// 底色的最低对比度。我们只改背景、不改文字色，而正文色接近纯黑，选到深色就
+// 不是「不好看」而是「读不了」——实测深灰 #555555 与正文的对比度只有 2.6，
+// 纯黑 1.1。7.0 是 WCAG 的 AAA 门槛，浅色底轻松满足，中灰以下会被挡住。
+let MIN_BG_CONTRAST = 7.0
+let PAGE_TEXT_RGB = (11.0, 11.0, 11.0)     // 页面正文色，来自 CDS 的 --gray-900
+
+private func relativeLuminance(_ rgb: (Double, Double, Double)) -> Double {
+    func ch(_ raw: Double) -> Double {
+        let v = raw / 255
+        return v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4)
+    }
+    return 0.2126 * ch(rgb.0) + 0.7152 * ch(rgb.1) + 0.0722 * ch(rgb.2)
+}
+
+func contrastRatio(_ a: (Double, Double, Double), _ b: (Double, Double, Double)) -> Double {
+    let l = [relativeLuminance(a), relativeLuminance(b)].sorted(by: >)
+    return (l[0] + 0.05) / (l[1] + 0.05)
+}
+
+/// 底色是否够浅，能让原有的深色正文读得清。
+func bgReadable(_ hex: String) -> Bool {
+    let h = Array(hex.dropFirst())
+    func byte(_ i: Int) -> Double {
+        Double(UInt8(String(h[i...(i + 1)]), radix: 16) ?? 0)
+    }
+    return contrastRatio((byte(0), byte(2), byte(4)), PAGE_TEXT_RGB) >= MIN_BG_CONTRAST
+}
+
 /// 页面底色。改 CDS 的 surface 语义 token，不动底层色阶——分隔线、边框也在用
 /// 那些，一起改会牵连出对比度问题。
 ///
@@ -203,6 +231,10 @@ func backgroundCSS(_ cfg: Config) -> String {
     let r = NSRange(color.startIndex..., in: color)
     guard hexRE.firstMatch(in: color, range: r) != nil else {
         info("底色 '\(color)' 不是 #RRGGBB 形式，已忽略")
+        return ""
+    }
+    guard bgReadable(color) else {
+        info("底色 \(color) 过深，正文将难以辨认（本工具不改文字颜色），已忽略。请选浅色。")
         return ""
     }
     func mix(_ pct: Int) -> String { "color-mix(in srgb, \(color) \(pct)%, #ffffff)" }
