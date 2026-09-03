@@ -1624,43 +1624,27 @@ struct ContentView: View {
     }
 
     // 玻璃需要背后有东西才能折射：两层极淡色晕，几乎看不见但不要删
+    /// 玻璃背后的东西。玻璃本身不产生形状，背后什么都没有的话，看到的其实
+    /// 只是一层灰——所以这里要有可折射的内容。
+    ///
+    /// 三团色取自产品自己的调色板：赤陶来自应用图标与「正式 Claude」卡片，
+    /// 暖砂承接米色底的那条线，蓝色对应「测试 Claude」与各处强调色。都压到
+    /// 一成左右并重度虚化，读起来是一层渐变，而不是三个色块。
     private var backdrop: some View {
         ZStack {
             Color(nsColor: .windowBackgroundColor)
-            Circle().fill(Color(hex: 0x78AAFF).opacity(0.14))
-                .frame(width: 520).blur(radius: 120).offset(x: -230, y: -300)
-            Circle().fill(Color(hex: 0xFFA0BE).opacity(0.11))
-                .frame(width: 460).blur(radius: 120).offset(x: 260, y: 330)
-            glassSubject
+            Circle().fill(Color(hex: 0xD97757).opacity(0.13))
+                .frame(width: 620).blur(radius: 150).offset(x: -260, y: -280)
+            Circle().fill(Color(hex: 0xE0A97B).opacity(0.11))
+                .frame(width: 520).blur(radius: 150)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                .offset(x: -110, y: 120)
+            Circle().fill(Color(hex: 0x5E78DC).opacity(0.09))
+                .frame(width: 560).blur(radius: 160).offset(x: 300, y: 260)
         }
         .ignoresSafeArea()
     }
 
-    /// 玻璃背后的那个「东西」。玻璃本身不产生形状，得有内容可折射才成立——
-    /// 只有色晕的话，看到的其实是一层灰。
-    ///
-    /// 用目标 Claude 自己的图标，从安装位置实时取，不随包分发别人的资源；
-    /// 没装 Claude 就什么都不画。稍微转个角度做出侧视透视，重度虚化后压到很低
-    /// 的不透明度：既能透出轮廓，又不会跟前景的文字抢注意力。
-    @ViewBuilder private var glassSubject: some View {
-        if FileManager.default.fileExists(atPath: m.fullPath(.production)) {
-            let icon = NSWorkspace.shared.icon(forFile: m.fullPath(.production))
-            Image(nsImage: icon)
-                .resizable()
-                .frame(width: 620, height: 620)
-                .rotation3DEffect(.degrees(-28), axis: (x: 0.16, y: 1, z: 0.05),
-                                  anchor: .center, perspective: 0.85)
-                // 自己只做轻度虚化，剩下的交给玻璃：糊到认不出就只剩一团光晕，
-                // 而玻璃本身会再糊一层。露在卡片外的部分也不宜太清晰。
-                .blur(radius: 11)
-                .opacity(0.28)
-                // 锚到左下角，而不是给个固定偏移：窗口高度会随内容变化，
-                // 固定偏移在长内容下会飘到中间。让它有一角溢出窗口边缘，
-                // 看起来像是从画面外透进来的。
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                .offset(x: -140, y: 150)
-        }
-    }
 
     /// Claude 的自动更新会重写 app.asar，此前应用的字体随之消失。用户看到的
     /// 只是「字体自己变回去了」，不主动说明的话，多半会以为是本软件出了问题。
