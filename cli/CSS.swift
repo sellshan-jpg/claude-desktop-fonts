@@ -35,6 +35,8 @@ let CDS_SANS = "\"anthropic-sans\", ui-sans-serif, -apple-system, BlinkMacSystem
 
 let CJK_FAMILY_BODY = "ClaudeCJKSerif"
 let CJK_FAMILY_UI = "ClaudeCJKSerifUI"
+let LATIN_FAMILY_BODY = "ClfontLatin"
+let LATIN_FAMILY_UI = "ClfontLatinUI"
 let CLFONT_MONO_FAMILY = "ClfontMono"
 
 // 远程 claude.ai 页面用的是 CDS 的 .cds-root 作用域版本，变量名带 --cds- 前缀
@@ -112,34 +114,99 @@ func scopeSpecs(_ cfg: Config) -> [ScopeSpec] {
     return out
 }
 
-/// 中文替换用的族。正文与界面各定义一份，除字号外完全相同——
+struct FaceFamily {
+    let name: String
+    let range: String
+    let scaleKey: String
+    let isUI: Bool
+}
+
+/// 中文替换用的族：正文与界面各一份，除字号外完全相同——
 /// 这样侧边栏、输入框的中文可以和正文用不同字号。
-func fontFaceCSS(_ cfg: Config) -> String {
-    let (reg, bold) = srcs(cfg)
-    var out = ""
-    for (fam, key) in [(CJK_FAMILY_BODY, "font_scale"), (CJK_FAMILY_UI, "font_scale_ui")] {
-        let adj = sizeAdjustCSS(scaleOf(cfg, key))
-        out += "@font-face{font-family:\"\(fam)\";font-weight:normal;"
-             + "src:\(reg);unicode-range:\(UNICODE_RANGE);\(adj)}"
-             + "@font-face{font-family:\"\(fam)\";font-weight:bold;"
-             + "src:\(bold);unicode-range:\(UNICODE_RANGE);\(adj)}"
+func cjkFamilies(_ cfg: Config) -> [FaceFamily] {
+    let scope = cfg.scope
+    guard scope == "cjk" || scope == "both", !srcs(cfg, "font").0.isEmpty else { return [] }
+    return [FaceFamily(name: CJK_FAMILY_BODY, range: UNICODE_RANGE,
+                       scaleKey: "font_scale", isUI: false),
+            FaceFamily(name: CJK_FAMILY_UI, range: UNICODE_RANGE,
+                       scaleKey: "font_scale_ui", isUI: true)]
+}
+
+/// 英文替换用的族。界面族不含重音区——图标就藏在 U+00C9 一带；
+/// 「仅正文」时界面族整个跳过。
+func latinFamilies(_ cfg: Config) -> [FaceFamily] {
+    let scope = cfg.scope
+    guard scope == "latin" || scope == "both",
+          !srcs(cfg, "font_latin").0.isEmpty else { return [] }
+    var out = [FaceFamily(name: LATIN_FAMILY_BODY,
+                          range: UNICODE_RANGE_LATIN + ", " + UNICODE_RANGE_LATIN_EXT,
+                          scaleKey: "font_scale_latin", isUI: false)]
+    if cfg.string("latin_scope") != "body" {
+        out.append(FaceFamily(name: LATIN_FAMILY_UI, range: UNICODE_RANGE_LATIN,
+                              scaleKey: "font_scale_ui", isUI: true))
     }
     return out
 }
 
-/// 把 ClaudeCJKSerif 前插到 CDS 字体变量——拉丁不受影响（unicode-range）。
-func varsCSS() -> String {
-    ":root{"
-    + "--font-anthropic-serif:\"\(CJK_FAMILY_BODY)\", \(CDS_SERIF) !important;"
-    + "--font-anthropic-sans:\"\(CJK_FAMILY_UI)\", \(CDS_SANS) !important;"
-    + "}"
+/// 替换用的自有族。
+///
+/// **绝不给 anthropic-sans / anthropic-serif 追加 @font-face。** 往这两个已存在
+/// 的 webfont 族里加声明，会让 Chromium 重建该族、把已经加载好的 webfont 打回
+/// unloaded 且不再取回；于是所有西文衬线掉到后备链里的 Georgia，数字变成旧式
+/// 数字（4 7 9 下沉），一眼可见。2026-09-03 在测试副本上做过对照实测：注入前
+/// webfont=loaded、数字宽 259.63，注入后 webfont=unloaded、数字宽 251.97
+/// （= Georgia），且 15 秒后与显式 document.fonts.load() 之后都不恢复。
+/// 替换一律走 varsCSS() 的变量前插。
+func fontFaceCSS(_ cfg: Config) -> String {
+    var out = ""
+    for (fams, key) in [(cjkFamilies(cfg), "font"), (latinFamilies(cfg), "font_latin")] {
+        if fams.isEmpty { continue }
+        let (reg, bold) = srcs(cfg, key)
+        for f in fams {
+            let adj = sizeAdjustCSS(scaleOf(cfg, f.scaleKey))
+            for style in ["normal", "italic"] {
+                // 按常规/粗体拆两段，免得粗体落回原字体走系统合成加粗。
+                out += "@font-face{font-family:\"\(f.name)\";src:\(reg);"
+                     + "unicode-range:\(f.range);\(adj)"
+                     + "font-weight:100 500;font-style:\(style);}"
+                     + "@font-face{font-family:\"\(f.name)\";src:\(bold);"
+                     + "unicode-range:\(f.range);\(adj)"
+                     + "font-weight:501 900;font-style:\(style);}"
+            }
+        }
+    }
+    return out
 }
 
-/// 给页面自己那两个家族再补一条只覆盖指定码位的 @font-face。
-/// 同名家族有多条声明时，重叠码位上后声明的生效；我们的样式追加在文档末尾。
-/// 关键：**完全不改任何 font-family**——侧边栏那些图标就是 anthropic-sans 里的
-/// 字形，一旦覆盖 font-family 就会变成豆腐块。
-func faceOverrideCSS(_ cfg: Config, _ families: [String] = PAGE_FONT_FAMILIES) -> String {
+/// 把我们自己的族前插到 CDS 字体变量。这是唯一的替换手段：既不改 font-family
+/// （侧边栏图标就是 anthropic-sans 里的字形，一改就成豆腐块），也不碰
+/// anthropic-* 这两个族本身（见 fontFaceCSS 的说明）。
+/// 各族的 unicode-range 互不重叠，所以前插的顺序无关紧要。
+func varsCSS(_ cfg: Config) -> String {
+    var serif: [String] = [], sans: [String] = []
+    for f in cjkFamilies(cfg) + latinFamilies(cfg) {
+        if f.isUI { sans.append(f.name) } else { serif.append(f.name) }
+    }
+    if serif.isEmpty && sans.isEmpty { return "" }
+    var decl = ""
+    if !serif.isEmpty {
+        let names = serif.map { "\"\($0)\"" }.joined(separator: ", ")
+        decl += "--font-anthropic-serif:\(names), \(CDS_SERIF) !important;"
+    }
+    if !sans.isEmpty {
+        let names = sans.map { "\"\($0)\"" }.joined(separator: ", ")
+        decl += "--font-anthropic-sans:\(names), \(CDS_SANS) !important;"
+    }
+    return ":root{" + decl + "}"
+}
+
+/// 给**系统具名字体族**补一条只覆盖指定码位的 @font-face（仅 brute 模式用）。
+/// families 里绝不能出现 anthropic-sans / anthropic-serif：那两个是页面用 url()
+/// 加载的 webfont 族，往里追加声明会把已加载的字体作废（见 fontFaceCSS 的说明）。
+/// 系统字体族没有这个问题，它们本来就是本地字体。
+func faceOverrideCSS(_ cfg: Config, _ families: [String]) -> String {
+    precondition(Set(families).isDisjoint(with: Set(PAGE_FONT_FAMILIES)),
+                 "不能给页面自己的 webfont 族追加 @font-face")
     var out: [String] = []
     let bodyOnly = cfg.string("latin_scope") == "body"
     let uiScale = scaleOf(cfg, "font_scale_ui")
@@ -260,17 +327,12 @@ func backgroundCSS(_ cfg: Config) -> String {
 func buildCSS(_ mode: String, _ cfg: Config) -> String {
     let scope = cfg.scope
     var parts = ["/* \(MARKER) mode=\(mode) scope=\(scope) */"]
-    if scope == "cjk" || scope == "both" {
-        // ClaudeCJKSerif + CDS 变量前插只服务于中文；只换英文时不要注入，
-        // 否则中文也会跟着变。
-        parts.append(fontFaceCSS(cfg))
-        parts.append(varsCSS())
-    }
-    parts.append(faceOverrideCSS(cfg))
+    parts.append(fontFaceCSS(cfg))
+    parts.append(varsCSS(cfg))
     parts.append(monoCSS(cfg))
     parts.append(backgroundCSS(cfg))
     if mode == "brute" { parts.append(bruteCSS(cfg)) }
-    let css = parts.joined(separator: " ")
+    let css = parts.filter { !$0.isEmpty }.joined(separator: " ")
     precondition(!css.contains("`") && !css.contains("${") && !css.contains("\\"),
                  "CSS 含会破坏 JS 模板字符串的字符")
     return css

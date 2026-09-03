@@ -180,12 +180,12 @@ def test_latin_ext_only_for_body_font():
     css = M.build_css("auto", cfg)
     import re
     faces = re.findall(r'@font-face\{[^}]*\}', css)
-    serif = [f for f in faces if '"anthropic-serif"' in f]
-    sans = [f for f in faces if '"anthropic-sans"' in f]
-    ok(serif and all("U+00C0-00FF" in f for f in serif),
-       "anthropic-serif 应覆盖重音字母区")
-    ok(sans and not any("U+00C0-00FF" in f for f in sans),
-       "anthropic-sans（承载图标）绝不能覆盖重音字母区")
+    body = [f for f in faces if '"ClfontLatin"' in f]
+    ui = [f for f in faces if '"ClfontLatinUI"' in f]
+    ok(body and all("U+00C0-00FF" in f for f in body),
+       "正文英文族应覆盖重音字母区")
+    ok(ui and not any("U+00C0-00FF" in f for f in ui),
+       "界面英文族绝不能覆盖重音字母区（图标就落在 U+00C9 一带）")
 
 
 @test
@@ -509,9 +509,44 @@ def test_latin_scope_body_skips_ui_family():
     allx = M.build_css("auto", dict(base, latin_scope="all"))
     faces_body = re.findall(r'@font-face\{[^}]*\}', body)
     faces_all = re.findall(r'@font-face\{[^}]*\}', allx)
-    eq(sum('"anthropic-sans"' in f for f in faces_body), 0, "仅正文时不该有界面字体规则")
-    ok(sum('"anthropic-serif"' in f for f in faces_body) > 0, "仅正文时仍要覆盖正文字体")
-    ok(sum('"anthropic-sans"' in f for f in faces_all) > 0, "全部时应覆盖界面字体")
+    eq(sum('"ClfontLatinUI"' in f for f in faces_body), 0, "仅正文时不该有界面字体规则")
+    ok(sum('"ClfontLatin"' in f for f in faces_body) > 0, "仅正文时仍要覆盖正文字体")
+    ok(sum('"ClfontLatinUI"' in f for f in faces_all) > 0, "全部时应覆盖界面字体")
+    ok('"ClfontLatinUI"' not in body, "仅正文时界面族不该出现在 CDS 变量里")
+    ok('"ClfontLatinUI"' in allx, "全部时界面族应前插到 CDS 变量")
+
+
+@test
+def test_never_declares_faces_for_page_webfont_families():
+    """绝不给 anthropic-sans / anthropic-serif 追加 @font-face。
+
+    这两个族是页面用 url() 加载的 webfont。往里面追加一条同名 @font-face，
+    Chromium 会重建该族、把已经加载好的 webfont 打回 unloaded 且不再取回，
+    于是所有西文衬线掉到后备链里的 Georgia——Georgia 用旧式数字（4 7 9 下沉），
+    「数字变得很奇怪」就是这么来的。2026-09-03 在测试副本上对照实测：
+    注入前 webfont=loaded、数字宽 259.63；注入后 webfont=unloaded、数字宽
+    251.97（= Georgia），15 秒后与显式 document.fonts.load() 之后都不恢复。
+
+    替换一律走 CDS 变量前插（vars_css），那条路不改 font-family、也不碰这两个
+    族本身，webfont 保持 loaded。这条测试就是那个约束。"""
+    M.set_app("/tmp/x.app")
+    combos = [
+        dict(M.DEFAULT_CONFIG, scope="cjk", font="Songti SC"),
+        dict(M.DEFAULT_CONFIG, scope="latin", font_latin="Times New Roman"),
+        dict(M.DEFAULT_CONFIG, scope="latin", font_latin="Times New Roman",
+             latin_scope="body"),
+        dict(M.DEFAULT_CONFIG, scope="both", font="Songti SC",
+             font_latin="Georgia", font_scale=120, font_scale_ui=130,
+             font_mono="Menlo", bg_color="#F0EEE6"),
+    ]
+    for mode in ("auto", "brute"):
+        for cfg in combos:
+            css = M.build_css(mode, cfg)
+            for face in re.findall(r'@font-face\{[^}]*\}', css):
+                for fam in M.PAGE_FONT_FAMILIES:
+                    ok(f'font-family:"{fam}"' not in face,
+                       f"mode={mode} scope={cfg['scope']} 下给 {fam} 追加了 @font-face："
+                       f"会让 Claude 自己的 webfont 永久失效\n  {face[:120]}")
 
 
 @test
@@ -521,7 +556,7 @@ def test_latin_scope_does_not_affect_cjk():
     cfg = dict(M.DEFAULT_CONFIG, scope="cjk", font="Songti SC", latin_scope="body")
     css = M.build_css("auto", cfg)
     faces = re.findall(r'@font-face\{[^}]*\}', css)
-    ok(sum('"anthropic-sans"' in f for f in faces) > 0, "中文替换不受英文范围开关影响")
+    ok(sum('"ClaudeCJKSerifUI"' in f for f in faces) > 0, "中文替换不受英文范围开关影响")
 
 
 @test
@@ -546,8 +581,8 @@ def test_ui_scale_is_independent_from_body():
             out.add(m.group(1) if m else "100")
         return out
 
-    eq(scales('"anthropic-sans"'), {"130"}, "界面族应使用界面字号")
-    eq(scales('"anthropic-serif"'), {"110"}, "正文族应使用正文字号")
+    eq(scales('"ClfontLatinUI"'), {"130"}, "界面英文族应使用界面字号")
+    eq(scales('"ClfontLatin"'), {"110"}, "正文英文族应使用正文字号")
     eq(scales('"ClaudeCJKSerifUI"'), {"130"}, "界面用的中文族应使用界面字号")
     eq(scales('"ClaudeCJKSerif"'), {"110"}, "正文用的中文族应使用正文字号")
 

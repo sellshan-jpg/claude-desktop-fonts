@@ -656,19 +656,60 @@ def scope_specs(cfg):
 
 CJK_FAMILY_BODY = "ClaudeCJKSerif"
 CJK_FAMILY_UI = "ClaudeCJKSerifUI"
+LATIN_FAMILY_BODY = "ClfontLatin"
+LATIN_FAMILY_UI = "ClfontLatinUI"
+
+
+def cjk_families(cfg):
+    """中文替换用的族：(族名, 码位区间, 字号 key)。正文与界面各一份，
+    除字号外完全相同——这样侧边栏、输入框的中文可以和正文用不同字号。"""
+    if cfg.get("scope", "cjk") not in ("cjk", "both"):
+        return []
+    if not _srcs(cfg, "font")[0]:
+        return []
+    return [(CJK_FAMILY_BODY, UNICODE_RANGE, "font_scale"),
+            (CJK_FAMILY_UI, UNICODE_RANGE, "font_scale_ui")]
+
+
+def latin_families(cfg):
+    """英文替换用的族。界面族不含重音区——图标就藏在 U+00C9 一带；
+    「仅正文」时界面族整个跳过。"""
+    if cfg.get("scope", "cjk") not in ("latin", "both"):
+        return []
+    if not _srcs(cfg, "font_latin")[0]:
+        return []
+    out = [(LATIN_FAMILY_BODY,
+            UNICODE_RANGE_LATIN + ", " + UNICODE_RANGE_LATIN_EXT, "font_scale_latin")]
+    if cfg.get("latin_scope") != "body":
+        out.append((LATIN_FAMILY_UI, UNICODE_RANGE_LATIN, "font_scale_ui"))
+    return out
 
 
 def font_face_css(cfg):
-    """中文替换用的族。正文与界面各定义一份，除字号外完全相同——
-    这样侧边栏、输入框的中文可以和正文用不同字号。"""
-    reg_src, bold_src = _srcs(cfg)
+    """替换用的自有族。
+
+    **绝不给 anthropic-sans / anthropic-serif 追加 @font-face。** 往这两个已存在
+    的 webfont 族里加声明，会让 Chromium 重建该族、把已经加载好的 webfont 打回
+    unloaded 且不再取回；于是所有西文衬线掉到后备链里的 Georgia，数字变成旧式
+    数字（4 7 9 下沉），一眼可见。2026-09-03 在测试副本上做过对照实测：注入前
+    webfont=loaded、数字宽 259.63，注入后 webfont=unloaded、数字宽 251.97
+    （= Georgia），且 15 秒后与显式 document.fonts.load() 之后都不恢复。
+    替换一律走 vars_css() 的变量前插。"""
     out = []
-    for fam, key in ((CJK_FAMILY_BODY, "font_scale"), (CJK_FAMILY_UI, "font_scale_ui")):
-        adj = size_adjust_css(_scale(cfg, key))
-        out.append(f'@font-face{{font-family:"{fam}";font-weight:normal;'
-                   f'src:{reg_src};unicode-range:{UNICODE_RANGE};{adj}}}')
-        out.append(f'@font-face{{font-family:"{fam}";font-weight:bold;'
-                   f'src:{bold_src};unicode-range:{UNICODE_RANGE};{adj}}}')
+    for fams, key in ((cjk_families(cfg), "font"), (latin_families(cfg), "font_latin")):
+        if not fams:
+            continue
+        reg_src, bold_src = _srcs(cfg, key)
+        for fam, rng, skey in fams:
+            adj = size_adjust_css(_scale(cfg, skey))
+            for style in ("normal", "italic"):
+                # 按常规/粗体拆两段，免得粗体落回原字体走系统合成加粗。
+                out.append(f'@font-face{{font-family:"{fam}";src:{reg_src};'
+                           f'unicode-range:{rng};{adj}'
+                           f'font-weight:100 500;font-style:{style};}}')
+                out.append(f'@font-face{{font-family:"{fam}";src:{bold_src};'
+                           f'unicode-range:{rng};{adj}'
+                           f'font-weight:501 900;font-style:{style};}}')
     return "".join(out)
 
 
@@ -686,13 +727,14 @@ EXTRA_FONT_FAMILIES = (
 )
 
 
-def face_override_css(cfg, families=PAGE_FONT_FAMILIES):
-    """给页面自己那两个家族再补一条只覆盖 CJK 码位的 @font-face。
+def face_override_css(cfg, families):
+    """给**系统具名字体族**补一条只覆盖指定码位的 @font-face（仅 brute 模式用）。
 
-    同名家族有多条 @font-face 时，重叠码位上后声明的那条生效；我们的样式是
-    追加在文档末尾的，所以 CJK 走选定字体，拉丁字形仍由原来的 anthropic 字体
-    渲染。好处是**完全不改任何 font-family**——侧边栏那些图标其实就是
-    anthropic-sans 里的字形，一旦覆盖 font-family 就会变成豆腐块。"""
+    families 里绝不能出现 anthropic-sans / anthropic-serif：那两个是页面用
+    url() 加载的 webfont 族，往里追加声明会把已加载的字体作废（见
+    font_face_css 的说明）。系统字体族没有这个问题，它们本来就是本地字体。"""
+    assert not set(families) & set(PAGE_FONT_FAMILIES), \
+        "不能给页面自己的 webfont 族追加 @font-face"
     out = []
     body_only = cfg.get("latin_scope") == "body"
     ui_scale = _scale(cfg, "font_scale_ui")
@@ -834,14 +876,24 @@ def mono_css(cfg):
     )
 
 
-def vars_css():
-    """把 ClaudeCJKSerif 前插到 CDS 字体变量——拉丁不受影响（unicode-range）。"""
-    return (
-        ":root{"
-        f'--font-anthropic-serif:"{CJK_FAMILY_BODY}", {CDS_SERIF} !important;'
-        f'--font-anthropic-sans:"{CJK_FAMILY_UI}", {CDS_SANS} !important;'
-        "}"
-    )
+def vars_css(cfg):
+    """把我们自己的族前插到 CDS 字体变量。这是唯一的替换手段：既不改
+    font-family（侧边栏图标就是 anthropic-sans 里的字形，一改就成豆腐块），
+    也不碰 anthropic-* 这两个族本身（见 font_face_css 的说明）。
+    各族的 unicode-range 互不重叠，所以前插的顺序无关紧要。"""
+    serif, sans = [], []
+    for fam, _rng, _key in cjk_families(cfg) + latin_families(cfg):
+        (sans if fam in (CJK_FAMILY_UI, LATIN_FAMILY_UI) else serif).append(fam)
+    if not serif and not sans:
+        return ""
+    decl = ""
+    if serif:
+        names = ", ".join(f'"{f}"' for f in serif)
+        decl += f"--font-anthropic-serif:{names}, {CDS_SERIF} !important;"
+    if sans:
+        names = ", ".join(f'"{f}"' for f in sans)
+        decl += f"--font-anthropic-sans:{names}, {CDS_SANS} !important;"
+    return ":root{" + decl + "}"
 
 
 def brute_css(cfg):
@@ -859,16 +911,13 @@ def brute_css(cfg):
 def build_css(mode, cfg):
     scope = cfg.get("scope", "cjk")
     parts = [f"/* {MARKER} mode={mode} scope={scope} */"]
-    if scope in ("cjk", "both"):
-        # ClaudeCJKSerif + CDS 变量前插只服务于中文；只换英文时不要注入，
-        # 否则中文也会跟着变。
-        parts += [font_face_css(cfg), vars_css()]
-    parts.append(face_override_css(cfg))
+    parts.append(font_face_css(cfg))
+    parts.append(vars_css(cfg))
     parts.append(mono_css(cfg))
     parts.append(background_css(cfg))
     if mode == "brute":
         parts.append(brute_css(cfg))
-    css = " ".join(parts)
+    css = " ".join(p for p in parts if p)
     assert "`" not in css and "${" not in css and "\\" not in css
     return css
 
