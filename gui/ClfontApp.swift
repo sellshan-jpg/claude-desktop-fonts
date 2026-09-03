@@ -1569,9 +1569,10 @@ struct ContentView: View {
         }
         .scrollDisabled(contentH <= maxContentH)
         .frame(width: 700, height: min(contentH, maxContentH))
-        // 背景走 .background，不参与布局，否则色斑会把窗口撑大、内容被居中；
-        // 给它一个超出窗口的固定高度，免得隐藏标题栏那 32pt 露出窗口底色
-        .background { backdrop.frame(height: 1400) }
+        // 背景必须挂到窗口容器上，不能只画在内容里：Liquid Glass 采样的是窗口
+        // 背衬，画在内容里的背景它看不见，会直接采到桌面壁纸——整张卡片就被
+        // 壁纸染色了（绿色壁纸下整个设置区泛绿）。
+        .containerBackground(for: .window) { backdrop }
         .overlay { if confirmRestore { restoreSheet } }
         .overlay { if confirmApply { applyConfirmSheet } }
         .overlay { if showApplying { applyingSheet } }
@@ -1630,8 +1631,35 @@ struct ContentView: View {
                 .frame(width: 520).blur(radius: 120).offset(x: -230, y: -300)
             Circle().fill(Color(hex: 0xFFA0BE).opacity(0.11))
                 .frame(width: 460).blur(radius: 120).offset(x: 260, y: 330)
+            glassSubject
         }
         .ignoresSafeArea()
+    }
+
+    /// 玻璃背后的那个「东西」。玻璃本身不产生形状，得有内容可折射才成立——
+    /// 只有色晕的话，看到的其实是一层灰。
+    ///
+    /// 用目标 Claude 自己的图标，从安装位置实时取，不随包分发别人的资源；
+    /// 没装 Claude 就什么都不画。稍微转个角度做出侧视透视，重度虚化后压到很低
+    /// 的不透明度：既能透出轮廓，又不会跟前景的文字抢注意力。
+    @ViewBuilder private var glassSubject: some View {
+        if FileManager.default.fileExists(atPath: m.fullPath(.production)) {
+            let icon = NSWorkspace.shared.icon(forFile: m.fullPath(.production))
+            Image(nsImage: icon)
+                .resizable()
+                .frame(width: 620, height: 620)
+                .rotation3DEffect(.degrees(-28), axis: (x: 0.16, y: 1, z: 0.05),
+                                  anchor: .center, perspective: 0.85)
+                // 自己只做轻度虚化，剩下的交给玻璃：糊到认不出就只剩一团光晕，
+                // 而玻璃本身会再糊一层。露在卡片外的部分也不宜太清晰。
+                .blur(radius: 11)
+                .opacity(0.28)
+                // 锚到左下角，而不是给个固定偏移：窗口高度会随内容变化，
+                // 固定偏移在长内容下会飘到中间。让它有一角溢出窗口边缘，
+                // 看起来像是从画面外透进来的。
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                .offset(x: -140, y: 150)
+        }
     }
 
     /// Claude 的自动更新会重写 app.asar，此前应用的字体随之消失。用户看到的
