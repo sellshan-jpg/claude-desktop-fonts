@@ -142,7 +142,7 @@ final class Copy: ObservableObject {
         // —— 字体设置
         "font.group": "字体",
         "preset.label": "推荐组合",
-        "preset.desc": "宋体 105%，配早期版本的米色底。点击后仍需执行「应用」",
+        "preset.desc": "中文字体使用宋体，字体大小 105%，底色为经典米色。选择后请「应用」",
         "preset.classic": "Claude 经典",
         "font.scope": "替换语言",
         "font.scope.cjk": "中文",
@@ -382,7 +382,7 @@ final class Copy: ObservableObject {
 
         "font.group": "Fonts",
         "preset.label": "Preset",
-        "preset.desc": "Songti at 105% on the cream background of earlier versions. You still need to apply it",
+        "preset.desc": "Songti for Chinese at 105%, on the classic cream background. Apply once you have chosen it",
         "preset.classic": "Claude Classic",
         "font.scope": "Language",
         "font.scope.cjk": "Chinese",
