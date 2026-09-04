@@ -1,5 +1,11 @@
 # Clfont
 
+[![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-blue)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-macOS%2026%2B-lightgrey)](#系统要求)
+[![Release](https://img.shields.io/github/v/release/sellshan-jpg/clfont)](https://github.com/sellshan-jpg/clfont/releases/latest)
+
+**简体中文** | [English](README.en.md)
+
 Clfont 是一款 macOS 工具，用于替换 Claude 桌面版界面中的字体。可选择只替换中文、
 只替换英文，或两者同时替换；未被选中的部分与界面图标均保持原有渲染效果。
 
