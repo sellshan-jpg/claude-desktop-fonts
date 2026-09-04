@@ -59,25 +59,29 @@ final class Copy: ObservableObject {
         "help.step2.title": "先在测试 Claude 上确认效果",
         "help.step2.body": "应用设置需要给 Claude 重新签名，原始签名会因此被替换。为避免反复改动日常使用的应用，建议先在测试 Claude 上确认效果。\n测试 Claude 是正式版的完整副本，拥有独立的应用标识与配置目录，对它的任何操作都不影响正式版。应用到测试 Claude 时不弹出确认，可反复尝试。",
         "help.step3.title": "应用到正式 Claude",
-        "help.step3.body": "效果满意后，切回「正式 Claude」卡片再执行一次。此时会先弹出确认，并列出本次将修改的项目。\n确认后进入应用过程，窗口内显示实时日志，可看到备份、重打包、重签名、启动验证各步的进展。整个过程约 1 至 2 分钟，完成后窗口自动关闭。\n随后 Clfont 会自动启动 Claude。首次启动时系统会请求访问钥匙串项「Claude Safe Storage」，请输入 Mac 的登录密码（即解锁屏幕所用的密码）并选择「始终允许」，登录状态方可保留。该请求可能连续出现数次，每次处理方式相同。",
+        "help.step3.body": "效果满意后，切回「正式 Claude」卡片再执行一次。此时会先弹出确认，并列出本次将修改的项目。\n确认后进入应用过程，窗口内显示实时日志，可看到备份、重打包、重签名、启动验证各步的进展。整个过程约 1 至 2 分钟，完成后窗口自动关闭。\n随后 Clfont 会自动启动 Claude。首次启动时系统会请求访问钥匙串项「Claude Safe Storage」，请输入 Mac 的登录密码（即解锁屏幕所用的密码）并选择「始终允许」，登录状态方可保留。该请求可能连续出现数次，每次处理方式相同。\n已应用过的目标，若之后又改动了设置，按钮上方会标出尚未应用。",
 
-        "help.step4.title": "替换语言与字体",
-        "help.step4.body": "「中文」只改中文字形，界面图标不受影响，为推荐选项。「英文」与「中英文」会一并改变英文的观感；若之后发现个别图标显示异常，改回「中文」即可。\n选中英文后会多出「替换范围」：「仅回复」只修改 Claude 的回复与标题，「全部」将会连带界面、输入框和用户发送的消息一起修改。小号界面标签换成正文衬线体后往往偏细，若介意请选择「仅回复」。\n选定后在下方按「中文」「英文」两组分别挑选字体，预览会立即更新。",
-        "help.step5.title": "字号",
-        "help.step5.body": "中文与英文可分别在 80% 至 150% 之间调节，用于弥补宋体等字体默认显示偏小的问题。\n「界面」一栏的字号单独管侧栏、底栏、输入框和用户发送的消息。这些位置本身只有 12–13px，跟随正文缩放时变化不明显，因此拆开。上方选择的范围完全不涉及界面时，该栏会隐藏。\n三项均只缩放被替换的文字，行距与整体布局不变，并非放大整个页面，因此设置过大时行内会显得拥挤。",
-        "help.step6.title": "代码块",
-        "help.step6.body": "可单独指定代码块与行内代码的等宽字体与字号，正文不受影响。默认为「保持不变」，此时不注入任何相关规则。选定字体后下方会显示预览，用于确认字形与对齐。",
-        "help.step7.title": "页面底色",
-        "help.step7.body": "将 Claude 的界面底色恢复为早期版本的米色。提供「经典」「浅米」「米灰」「淡蓝」四档预设，也可用取色器自选。\n仅在浅色模式生效，深色模式下该设置不起作用，不会影响深色配色。\n底色过深会导致正文难以辨认，此类颜色将被拒绝并给出提示。",
-        "help.step8.title": "兼容模式",
-        "help.step8.body": "保持「标准」即可。若个别区域的字体未跟随变化，再切换至「扩展」，此时会多覆盖一批常见字体。",
+        "help.step4.title": "推荐组合「Claude 经典」",
+        "help.step4.body": "不确定从何入手时，直接选用「Claude 经典」。它一次设定三项：中文字体使用宋体、字体大小 105%、底色为经典米色。\n选定后仍需执行「应用」方才生效。此后单独调整其中任意一项，该组合只是不再显示为选中，已改的内容不会被还原。",
+        "help.step5.title": "替换语言与字体",
+        "help.step5.body": "「中文」只改中文字形，界面图标不受影响，为推荐选项。「英文」与「中英文」会一并改变英文的观感；若之后发现个别图标显示异常，改回「中文」即可。\n选中英文后会多出「替换范围」：「仅回复」只修改 Claude 的回复与标题，「全部」将会连带界面、输入框和用户发送的消息一起修改。小号界面标签换成正文衬线体后往往偏细，若介意请选择「仅回复」。\n选定后在下方按「中文」「英文」两组分别挑选字体，预览会立即更新。\n粗体所用的字面由程序按实际笔画粗细挑选。宋体、楷体等字体自带的「Bold」与正文差别极小，此时会自动改用同族更重的一档。",
+        "help.step6.title": "字号",
+        "help.step6.body": "中文与英文可分别在 80% 至 150% 之间调节，用于弥补宋体等字体默认显示偏小的问题。\n「界面」一栏的字号单独管侧栏、底栏、输入框和用户发送的消息。这些位置本身只有 12–13px，跟随正文缩放时变化不明显，因此拆开。上方选择的范围完全不涉及界面时，该栏会隐藏。\n三项均只缩放被替换的文字，行距与整体布局不变，并非放大整个页面，因此设置过大时行内会显得拥挤。",
+        "help.step7.title": "代码块",
+        "help.step7.body": "可单独指定代码块与行内代码的等宽字体与字号，正文不受影响。默认为「保持不变」，此时不注入任何相关规则。选定字体后下方会显示预览，用于确认字形与对齐。",
+        "help.step8.title": "页面底色",
+        "help.step8.body": "将 Claude 的界面底色恢复为早期版本的米色。提供「经典」「浅米」「米灰」「淡蓝」四档预设，也可用取色器自选。\n仅在浅色模式生效，深色模式下该设置不起作用，不会影响深色配色。\n底色过深会导致正文难以辨认，此类颜色将被拒绝并给出提示。",
+        "help.step9.title": "兼容模式",
+        "help.step9.body": "保持「标准」即可。若个别区域的字体未跟随变化，再切换至「扩展」，此时会多覆盖一批常见字体。",
 
-        "help.step9.title": "Claude 更新后需重新应用",
-        "help.step9.body": "Claude 的自动更新会重写应用内容，此前应用的字体随之失效。程序检测到该情况时会在主界面提示，并附「重新应用」按钮，点击即可恢复，字体设置无需重选。",
-        "help.step10.title": "还原与自检",
-        "help.step10.body": "「还原」撤销全部修改。若能匹配到当前版本的完整备份，Anthropic 的原始签名会一并恢复。\n遇到异常先执行「自检」：程序会检查应用完整性、未完成的事务、字体、磁盘空间、哈希与签名，结果写入日志。",
-        "help.step11.title": "应用过程与失败处理",
-        "help.step11.body": "应用依次执行：退出目标应用 → 创建完整备份 → 重新打包 → 更新完整性哈希 → 重新签名 → 启动验证。\n任一环节失败或中途取消，都会将文件恢复原样并重新验证签名。因此最坏的结果是「未能应用」，而非「Claude 打不开」。\n需要注意：自动回滚只恢复文件内容，不恢复 Claude 的原始签名。要连签名一起恢复，请执行「还原」。",
+        "help.step10.title": "Claude 更新后需重新应用",
+        "help.step10.body": "Claude 的自动更新会重写应用内容，此前应用的字体随之失效。程序检测到该情况时会在主界面提示，并附「重新应用」按钮，点击即可恢复，字体设置无需重选。",
+        "help.step11.title": "Claude 安装在其他位置",
+        "help.step11.body": "若 Claude 不在「应用程序」文件夹，在上方的目标列表中选择「其他位置」，再指向对应的 Claude.app。\n该位置会被记住，与正式 Claude、测试 Claude 并列，各自独立记录已应用的设置。不再需要时点「移出列表」，仅从列表中移除，不会删除应用本身。",
+        "help.step12.title": "还原与自检",
+        "help.step12.body": "「还原」撤销全部修改。若能匹配到当前版本的完整备份，Anthropic 的原始签名会一并恢复。\n遇到异常先执行「自检」：程序会检查应用完整性、未完成的事务、字体、磁盘空间、哈希与签名，结果写入日志。",
+        "help.step13.title": "应用过程与失败处理",
+        "help.step13.body": "应用依次执行：退出目标应用 → 创建完整备份 → 重新打包 → 更新完整性哈希 → 重新签名 → 启动验证。\n任一环节失败或中途取消，都会将文件恢复原样并重新验证签名。因此最坏的结果是「未能应用」，而非「Claude 打不开」。\n需要注意：自动回滚只恢复文件内容，不恢复 Claude 的原始签名。要连签名一起恢复，请执行「还原」。",
 
         "help.safety.title": "关于安全性",
         "help.safety.b1": "注入内容只有字体与底色的样式规则（CSS），不改动任何网络请求，也不绕过任何限制或配额。",
@@ -296,25 +300,29 @@ final class Copy: ObservableObject {
         "help.step2.title": "Try it on the test Claude first",
         "help.step2.body": "Applying means re-signing Claude, which replaces its original signature. Rather than keep reworking the app you use all day, confirm each change on the test Claude first.\nThe test Claude is a full copy with its own app identity and its own profile, so nothing you do to it reaches the real one. Applying to it skips the confirmation, so experiment freely.",
         "help.step3.title": "Apply to your main Claude",
-        "help.step3.body": "Happy with how it looks? Switch back to the Main Claude card and apply again. Clfont confirms first, listing what this run will change.\nThen the work begins, with a live log showing the backup, repack, re-sign and launch check as they happen. It takes a minute or two, and the window closes itself when it is done.\nClaude then starts back up. On that first launch macOS asks for the \"Claude Safe Storage\" keychain item: enter your Mac login password, the one that unlocks the screen, and choose Always Allow, so your session carries over. It may ask several times over; answer it the same way each time.",
+        "help.step3.body": "Happy with how it looks? Switch back to the Main Claude card and apply again. Clfont confirms first, listing what this run will change.\nThen the work begins, with a live log showing the backup, repack, re-sign and launch check as they happen. It takes a minute or two, and the window closes itself when it is done.\nClaude then starts back up. On that first launch macOS asks for the \"Claude Safe Storage\" keychain item: enter your Mac login password, the one that unlocks the screen, and choose Always Allow, so your session carries over. It may ask several times over; answer it the same way each time.\nChange a setting on a target you have already applied to, and a line above the buttons says so.",
 
-        "help.step4.title": "Language and fonts",
-        "help.step4.body": "Chinese swaps Chinese characters only and leaves the interface icons alone, which is why it is the default. If an icon ever looks wrong after using English or Both, switch back to Chinese.\nOnce English is in play, a Scope row appears: Replies only changes Claude's replies and headings, while Everything also takes the interface, the composer and the messages you send. Small interface labels tend to look thin in a body serif, so pick Replies only if that matters to you.\nFonts are then chosen per language below, and the preview updates as you go.",
-        "help.step5.title": "Size",
-        "help.step5.body": "Chinese and English each scale from 80% to 150%, which helps with fonts like Songti that come out small at their default size.\nInterface size is a separate dial for the sidebar, the bottom bar, the composer and the messages you send. They sit at 12–13px, where scaling with the body adds barely a pixel, so they are split apart. It is hidden when nothing you selected above touches the interface.\nAll three scale the replaced characters only. Line spacing and layout stay put, so this is not the same as zooming the page, and pushing it too far leaves the lines crowded.",
-        "help.step6.title": "Code blocks",
-        "help.step6.body": "Code blocks and inline code can take their own monospace font and size, with body text left alone. Leave it unchanged and Clfont writes no code-related rules at all. Pick a font and a preview appears underneath, for checking shapes and alignment.",
-        "help.step7.title": "Page background",
-        "help.step7.body": "Restores the cream background of earlier Claude versions. Four presets — Classic, Light, Greige and Pale blue — or pick your own with the colour well.\nLight mode only; in dark mode the setting does nothing, so the dark palette is never affected.\nA background too dark to read against is refused, with an explanation.",
-        "help.step8.title": "Compatibility",
-        "help.step8.body": "Leave this on Standard. If some corner of the interface keeps its old font, switch to Extended, which applies the same rules across a wider set of font families.",
+        "help.step4.title": "The Claude Classic preset",
+        "help.step4.body": "Not sure where to begin? Choose Claude Classic. It sets three things at once: Songti for Chinese, size at 105%, and the classic cream background.\nApplying is still a separate step. Adjust any one of the three afterwards and the preset simply stops showing as chosen — nothing you changed is undone.",
+        "help.step5.title": "Language and fonts",
+        "help.step5.body": "Chinese swaps Chinese characters only and leaves the interface icons alone, which is why it is the default. If an icon ever looks wrong after using English or Both, switch back to Chinese.\nOnce English is in play, a Scope row appears: Replies only changes Claude's replies and headings, while Everything also takes the interface, the composer and the messages you send. Small interface labels tend to look thin in a body serif, so pick Replies only if that matters to you.\nFonts are then chosen per language below, and the preview updates as you go.\nThe face used for bold is picked by measured stroke weight. Fonts like Songti and Kaiti ship a Bold barely heavier than their regular, and a heavier face from the same family is used in its place.",
+        "help.step6.title": "Size",
+        "help.step6.body": "Chinese and English each scale from 80% to 150%, which helps with fonts like Songti that come out small at their default size.\nInterface size is a separate dial for the sidebar, the bottom bar, the composer and the messages you send. They sit at 12–13px, where scaling with the body adds barely a pixel, so they are split apart. It is hidden when nothing you selected above touches the interface.\nAll three scale the replaced characters only. Line spacing and layout stay put, so this is not the same as zooming the page, and pushing it too far leaves the lines crowded.",
+        "help.step7.title": "Code blocks",
+        "help.step7.body": "Code blocks and inline code can take their own monospace font and size, with body text left alone. Leave it unchanged and Clfont writes no code-related rules at all. Pick a font and a preview appears underneath, for checking shapes and alignment.",
+        "help.step8.title": "Page background",
+        "help.step8.body": "Restores the cream background of earlier Claude versions. Four presets — Classic, Light, Greige and Pale blue — or pick your own with the colour well.\nLight mode only; in dark mode the setting does nothing, so the dark palette is never affected.\nA background too dark to read against is refused, with an explanation.",
+        "help.step9.title": "Compatibility",
+        "help.step9.body": "Leave this on Standard. If some corner of the interface keeps its old font, switch to Extended, which applies the same rules across a wider set of font families.",
 
-        "help.step9.title": "Re-apply after Claude updates",
-        "help.step9.body": "A Claude update rewrites the app, and your fonts go with it. Clfont notices and says so in the main window, with a Re-apply button next to it. One click and you're back — your settings were never lost.",
-        "help.step10.title": "Restore and Diagnose",
-        "help.step10.body": "Restore undoes everything. When a full backup of the current version is available, Anthropic's original signature comes back with it.\nIf something looks off, start with Diagnose: it checks app integrity, unfinished work, fonts, disk space, hashes and signatures, and writes what it finds to the log.",
-        "help.step11.title": "What applying does, and what happens if it fails",
-        "help.step11.body": "Applying works through: quit the target app → take a full backup → repack → update the integrity hash → re-sign → check that it launches.\nIf any step fails, or you cancel partway, the files go back as they were and the signature is verified again. The worst outcome is that nothing was applied, not a Claude that won't open.\nOne thing to know: that automatic rollback restores the files, not Claude's original signature. Use Restore if you want the signature back too.",
+        "help.step10.title": "Re-apply after Claude updates",
+        "help.step10.body": "A Claude update rewrites the app, and your fonts go with it. Clfont notices and says so in the main window, with a Re-apply button next to it. One click and you're back — your settings were never lost.",
+        "help.step11.title": "Claude installed somewhere else",
+        "help.step11.body": "If your Claude lives outside the Applications folder, pick Other location in the target list above and point Clfont at the Claude.app.\nThat location is remembered alongside the main and test Claude, each keeping its own record of what has been applied. Remove from list takes it off the list only; the app itself is left where it is.",
+        "help.step12.title": "Restore and Diagnose",
+        "help.step12.body": "Restore undoes everything. When a full backup of the current version is available, Anthropic's original signature comes back with it.\nIf something looks off, start with Diagnose: it checks app integrity, unfinished work, fonts, disk space, hashes and signatures, and writes what it finds to the log.",
+        "help.step13.title": "What applying does, and what happens if it fails",
+        "help.step13.body": "Applying works through: quit the target app → take a full backup → repack → update the integrity hash → re-sign → check that it launches.\nIf any step fails, or you cancel partway, the files go back as they were and the signature is verified again. The worst outcome is that nothing was applied, not a Claude that won't open.\nOne thing to know: that automatic rollback restores the files, not Claude's original signature. Use Restore if you want the signature back too.",
 
         "help.safety.title": "On safety",
         "help.safety.b1": "The only thing injected is CSS for fonts and the background. Network requests are untouched, and nothing bypasses any limit or quota.",
@@ -707,23 +715,33 @@ let releaseNotes: [ReleaseNote] = [
         version: "6.0",
         zh: [
             "不再需要 Xcode 命令行工具。命令行部分已重写并编入应用包，安装后即可直接使用。",
+            "新增推荐组合「Claude 经典」，一次设定中文宋体、105% 字号与经典米色底色。",
             "新增页面底色，可将 Claude 的界面底色恢复为早期版本的米色。提供四档预设，也可自行取色。仅在浅色模式生效。",
             "新增代码块设置，可单独指定代码块与行内代码的等宽字体与字号，正文不受影响。",
             "新增界面字号，可单独调整侧栏、底栏、输入框与用户发送消息的字号。这些位置本身仅 12–13px，跟随正文缩放时变化不明显。",
             "新增英文替换范围，换英文时可只改 Claude 的回复与标题，或连界面一起改。小号界面标签换成正文衬线体后会偏细，此选项用于避免该问题。",
             "界面支持简体中文与英文，默认跟随系统语言。该设置仅作用于 Clfont 自身，不会改变 Claude。",
+            "支持修改安装在其他位置的 Claude，与正式版、测试版并列管理，各自独立记录已应用的设置。",
             "应用到正式 Claude 前会先行确认，并列出本次将修改的项目；应用过程中显示实时日志；完成后自动启动 Claude 并说明钥匙串授权。",
+            "已应用过的目标，在设置改动后会标出尚未应用。",
+            "修复应用后 Claude 自身的西文衬线字体失效、数字与英文改用 Georgia 显示的问题。此前替换英文不完全、思考过程文本偶尔不跟随变化，均源于同一原因。",
+            "粗体改为按实际笔画粗细挑选字面。宋体、楷体等字体自带的「Bold」与正文差别极小，现会自动改用同族更重的一档。",
             "修复替换英文时带重音的拉丁字母（é ü ñ 等）不跟随变化的问题。此前这些字符会保留原字体，欧洲语言正文因此出现混排。",
             "修复缺少「App 管理」权限时提示位于视野之外、看似无响应的问题。",
         ],
         en: [
             "The Xcode Command Line Tools are no longer required. The command-line half was rewritten and now ships inside the app.",
+            "Added the Claude Classic preset: Songti for Chinese, 105% size and the classic cream background, in a single choice.",
             "Added a page background, which brings back the cream tone of earlier Claude versions. Four presets, or pick your own colour. Light mode only.",
             "Added code block settings: a monospace font and size of their own, for code blocks and inline code, with body text left alone.",
             "Added an interface size for the sidebar, the bottom bar, the composer and the messages you send. These sit at 12–13px, where scaling with the body goes unnoticed.",
             "Added a scope switch for English: change Claude's replies and headings only, or the whole interface with them. Small interface labels look thin in a body serif, and this is the way around that.",
             "The interface comes in Simplified Chinese and English, following your system by default. It only changes Clfont, never Claude.",
+            "A Claude installed outside the Applications folder can be targeted too, listed alongside the main and test copies and tracked separately.",
             "Applying to your main Claude now confirms first and lists what will change, shows a live log while it works, then starts Claude and explains the keychain prompt.",
+            "A target you have already applied to now says so when its settings have since changed.",
+            "Fixed Claude's own Latin serif dropping out after applying, which left digits and English rendered in Georgia. English replacement being incomplete, and thinking text occasionally keeping its old font, came from the same cause.",
+            "Bold now picks its face by measured stroke weight. Fonts like Songti and Kaiti ship a Bold barely heavier than their regular, and a heavier face from the same family is used instead.",
             "Fixed accented Latin letters (é, ü, ñ and the rest) keeping their old font when replacing English, which left European text visibly mismatched.",
             "Fixed the missing-permission notice sitting off-screen, which made applying look unresponsive.",
         ],
@@ -1563,7 +1581,9 @@ private struct GlassSwitch: View {
 
 /// 教学指引里内联的按钮样例：照着界面上真实按钮的样子缩小复刻一份，
 /// 让用户一眼认出该点哪个，而不是只读到一个名字。
-private enum ChipKind { case primary, glass, link, danger }
+// prod 对应界面上用赤陶色的那类按钮（「Claude 经典」「重新应用」），
+// 样例配色必须和真实按钮一致，否则指引反而让人找不到。
+private enum ChipKind { case primary, prod, glass, link, danger }
 
 private struct BtnChip: View {
     let title: String
@@ -1577,6 +1597,12 @@ private struct BtnChip: View {
                 .padding(.horizontal, 11).padding(.vertical, 4.5)
                 .background(Capsule().fill(DS.accent))
                 .shadow(color: DS.accent.opacity(0.28), radius: 3, y: 1)
+        case .prod:
+            base.font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 11).padding(.vertical, 4.5)
+                .background(Capsule().fill(DS.prod))
+                .shadow(color: DS.prod.opacity(0.28), radius: 3, y: 1)
         case .glass:
             base.font(.system(size: 11.5))
                 .padding(.horizontal, 11).padding(.vertical, 4.5)
@@ -2865,6 +2891,12 @@ struct ContentView: View {
 
                         helpSection(t("help.sec.settings"))
                         helpStep(4, t("help.step4.title"), t("help.step4.body")) {
+                            ActionLine(lead: t("help.a4.lead")) {
+                                BtnChip(title: t("preset.classic"), kind: .prod)
+                            }
+                        }
+
+                        helpStep(5, t("help.step5.title"), t("help.step5.body")) {
                             VStack(alignment: .leading, spacing: 7) {
                                 ActionLine(lead: t("font.scope")) {
                                     SegChip(options: [t("font.scope.cjk"), t("font.scope.latin"),
@@ -2879,24 +2911,30 @@ struct ContentView: View {
                             }
                         }
 
-                        helpStep(5, t("help.step5.title"), t("help.step5.body"))
                         helpStep(6, t("help.step6.title"), t("help.step6.body"))
                         helpStep(7, t("help.step7.title"), t("help.step7.body"))
+                        helpStep(8, t("help.step8.title"), t("help.step8.body"))
 
-                        helpStep(8, t("help.step8.title"), t("help.step8.body")) {
+                        helpStep(9, t("help.step9.title"), t("help.step9.body")) {
                             ActionLine(lead: t("font.mode")) {
                                 SegChip(options: [t("font.mode.std"), t("font.mode.ext")], selected: 0)
                             }
                         }
 
                         helpSection(t("help.sec.daily"))
-                        helpStep(9, t("help.step9.title"), t("help.step9.body")) {
+                        helpStep(10, t("help.step10.title"), t("help.step10.body")) {
                             ActionLine(lead: t("help.a4.lead")) {
-                                BtnChip(title: t("stale.action"), kind: .primary)
+                                BtnChip(title: t("stale.action"), kind: .prod)
                             }
                         }
 
-                        helpStep(10, t("help.step10.title"), t("help.step10.body")) {
+                        helpStep(11, t("help.step11.title"), t("help.step11.body")) {
+                            ActionLine(lead: t("help.a4.lead")) {
+                                BtnChip(title: t("target.choose"), kind: .link)
+                            }
+                        }
+
+                        helpStep(12, t("help.step12.title"), t("help.step12.body")) {
                             ActionLine(lead: t("help.a4.lead")) {
                                 HStack(spacing: 6) {
                                     BtnChip(title: t("action.restore"), kind: .danger)
@@ -2905,7 +2943,7 @@ struct ContentView: View {
                             }
                         }
 
-                        helpStep(11, t("help.step11.title"), t("help.step11.body"))
+                        helpStep(13, t("help.step13.title"), t("help.step13.body"))
                     }
                     .padding(.horizontal, 24).padding(.vertical, 20)
                 }
