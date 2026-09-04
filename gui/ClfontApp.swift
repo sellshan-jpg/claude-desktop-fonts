@@ -3295,7 +3295,7 @@ struct ContentView: View {
 // MARK: - 关于
 
 enum Updater {
-    static let repo = "sellshan-jpg/clfont"
+    static let repo = "sellshan-jpg/claude-desktop-fonts"
 
     static var version: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"

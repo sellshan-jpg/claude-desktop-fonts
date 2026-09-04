@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-blue)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-macOS%2026%2B-lightgrey)](#系统要求)
-[![Release](https://img.shields.io/github/v/release/sellshan-jpg/clfont)](https://github.com/sellshan-jpg/clfont/releases/latest)
+[![Release](https://img.shields.io/github/v/release/sellshan-jpg/claude-desktop-fonts)](https://github.com/sellshan-jpg/claude-desktop-fonts/releases/latest)
 
 **简体中文** | [English](README.en.md)
 
@@ -117,7 +117,7 @@ Clfont 的全部操作均在本机完成，具体范围如下：
 
 ## 安装
 
-1. 从 [Releases](https://github.com/sellshan-jpg/clfont/releases) 下载
+1. 从 [Releases](https://github.com/sellshan-jpg/claude-desktop-fonts/releases) 下载
    `Clfont.app`，移动至「应用程序」文件夹。
 2. 本应用采用 ad-hoc 签名，未经 Apple 公证，首次打开时 Gatekeeper 会予以拦截。
    请执行以下命令移除隔离属性：
@@ -243,7 +243,7 @@ Clfont 在首次修改前会创建完整应用备份，保存于
 与本工具相关。向 Anthropic 提交问题报告前，请确认目标应用未处于被修改的状态。
 
 与 Clfont 相关的问题，欢迎提交至
-[Issues](https://github.com/sellshan-jpg/clfont/issues)。
+[Issues](https://github.com/sellshan-jpg/claude-desktop-fonts/issues)。
 
 ## 测试
 
@@ -319,4 +319,4 @@ Copyright © 2026 赵万 (Jovan)。本项目采用
   非商业限制约束。
 
 以许可证原文为准。若需商业授权，请通过
-[Issues](https://github.com/sellshan-jpg/clfont/issues) 联系。
+[Issues](https://github.com/sellshan-jpg/claude-desktop-fonts/issues) 联系。

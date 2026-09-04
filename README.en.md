@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-blue)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-macOS%2026%2B-lightgrey)](#requirements)
-[![Release](https://img.shields.io/github/v/release/sellshan-jpg/clfont)](https://github.com/sellshan-jpg/clfont/releases/latest)
+[![Release](https://img.shields.io/github/v/release/sellshan-jpg/claude-desktop-fonts)](https://github.com/sellshan-jpg/claude-desktop-fonts/releases/latest)
 
 [简体中文](README.md) | **English**
 
@@ -142,8 +142,8 @@ provide is a 118KB shim that cannot run without them.
 ## Installing
 
 1. Download `Clfont.app` from
-   [Releases](https://github.com/sellshan-jpg/clfont/releases) and move it to
-   your Applications folder.
+   [Releases](https://github.com/sellshan-jpg/claude-desktop-fonts/releases)
+   and move it to your Applications folder.
 2. The app is ad-hoc signed and not notarised by Apple, so Gatekeeper blocks the
    first launch. Clear the quarantine attribute:
 
@@ -298,7 +298,7 @@ whether the problem has anything to do with this tool. Before filing a report
 with Anthropic, make sure the app is not in a modified state.
 
 Problems with Clfont are welcome at
-[Issues](https://github.com/sellshan-jpg/clfont/issues).
+[Issues](https://github.com/sellshan-jpg/claude-desktop-fonts/issues).
 
 ## Tests
 
@@ -383,4 +383,4 @@ source. In short:
   restriction.
 
 The licence text governs. For a commercial licence, get in touch through
-[Issues](https://github.com/sellshan-jpg/clfont/issues).
+[Issues](https://github.com/sellshan-jpg/claude-desktop-fonts/issues).
