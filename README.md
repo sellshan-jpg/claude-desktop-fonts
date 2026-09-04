@@ -30,28 +30,43 @@ Claude 桌面版的界面内容由远程 `claude.ai` 提供，其字体来自两
 `anthropic-sans` 与 `anthropic-serif`。
 
 Clfont 在 `app.asar` 的 renderer preload 中追加一段脚本，向页面注入如下形式的
-样式规则：
+样式规则：先声明一个自有字体族，只覆盖需要替换的码位；再把它前插到 Claude 的
+字体变量中。
 
 ```css
 @font-face {
-  font-family: anthropic-sans;          /* 与页面既有字体族同名 */
+  font-family: ClaudeCJKSerif;          /* 自有族名，不与页面既有族同名 */
   src: local("STSongti-SC-Regular");
   unicode-range: U+4E00-9FFF, ...;      /* 仅覆盖 CJK 码位 */
 }
+:root {
+  --font-anthropic-serif: "ClaudeCJKSerif", "anthropic-serif", ui-serif, ... !important;
+}
 ```
 
-依据 CSS 字体匹配规则，同一字体族存在多条 `@font-face` 声明时，重叠码位由后声明
-的规则生效。因此被覆盖的码位使用指定字体渲染，其余码位仍由原有字体处理。替换范围
-即由 `unicode-range` 决定：
+字体栈按字符逐个求值：某字符不在前一个族的 `unicode-range` 内时，交由栈中下一个
+族渲染。因此被覆盖的码位使用指定字体，其余码位仍由 Claude 原本的 Web 字体处理。
+替换范围即由 `unicode-range` 决定：
 
 | 替换范围 | 覆盖的码位 |
 | --- | --- |
 | 中文 | `U+2E80-2EFF`、`U+3000-303F`、`U+3400-4DBF`、`U+4E00-9FFF`、`U+F900-FAFF`、`U+FF00-FFEF` |
-| 英文 | `U+0020-007E`（基本拉丁） |
+| 英文 | `U+0020-007E`（基本拉丁），正文另含 `U+00C0-00FF`、`U+0100-017F`（带重音的拉丁字母） |
 | 中英文 | 以上全部 |
 
-英文范围**刻意不含拉丁文补充区（`U+00A0-00FF`）与私用区**。Claude 界面中的图标由
-字体字形实现，实测显示其码位落在这些区段；将其排除可确保替换英文时图标不受影响。
+英文范围**刻意不含拉丁文补充区中的符号段与私用区**。Claude 界面中的图标由字体
+字形实现，实测显示其码位落在这些区段；将其排除可确保替换英文时图标不受影响。
+带重音的拉丁字母只对正文字体放开，承载图标的界面字体不放开。
+
+**不能给 `anthropic-sans` / `anthropic-serif` 追加同名 `@font-face`。** 这两个族由
+页面用 `url()` 加载。向其追加声明会使 Chromium 重建该族，已加载的 Web 字体被置回
+未加载状态且不再取回，结果是全部西文衬线沿后备链掉到 `Georgia`。实测：追加前该族
+状态为 `loaded`、数字串宽 259.63px；追加后为 `unloaded`、宽 251.97px（即 Georgia），
+15 秒后及显式调用 `document.fonts.load()` 之后均不恢复。因此替换一律经由变量前插，
+自有族名与页面既有族名不重叠。
+
+粗体所用的字面按实测笔画粗细选取。部分字体自带的 Bold 与其正体差别过小——宋体为
+1.16 倍墨量、楷体为 1.23 倍，而多数字体在 1.34 倍以上——此时改用同族更重的一档。
 
 该方案的关键特性是**不修改任何 `font-family` 声明**。Claude 界面中的图标由字体
 字形实现，若通过覆盖 `font-family` 的方式替换字体，图标将无法正常显示。
@@ -65,9 +80,9 @@ Clfont 的全部操作均在本机完成，具体范围如下：
 
 - **修改前先检测环境。** 缺少必要组件时直接给出提示并终止，不会留下改到一半的
   应用。
-- **注入内容仅有字体规则。** 写入页面的只有 CSS `@font-face` 声明，作用范围限于
-  指定码位的字形渲染。不改动任何网络请求，不伪造客户端身份，不绕过任何限制、配额
-  或计费。
+- **注入内容仅有样式规则。** 写入页面的只有 CSS：`@font-face` 声明，以及字体族与
+  底色两类自定义属性的取值。作用范围限于指定码位的字形渲染与界面底色。不改动任何
+  网络请求，不伪造客户端身份，不绕过任何限制、配额或计费。
 - **不接触账号与会话数据。** 不读取、不上传账号信息与聊天记录。唯一的对外请求是
   检查更新时读取本项目的 GitHub Releases 接口（`api.github.com`），该请求不携带
   任何本机信息，可在「关于」窗口中关闭自动检查。
@@ -206,13 +221,15 @@ Clfont 在首次修改前会创建完整应用备份，保存于
 - **Claude 自动更新会覆盖已应用的修改。** 程序检测到这一情况时，会在主界面给出
   提示并附带「重新应用」按钮，点击即可恢复，字体设置无需重新选择。
 - **实现依赖 Claude 当前的构建细节。** 字体族名称 `anthropic-sans` 与
-  `anthropic-serif` 来自远程 `claude.ai`；打包路径 `.vite/build/mainView.js`、
-  `ElectronAsarIntegrity` 机制及 Electron fuse 配置来自当前桌面版构建。上述任一
-  项发生变化，都可能导致修改失效，需等待 Clfont 更新。
+  `anthropic-serif`、字体变量 `--font-anthropic-serif` / `--font-anthropic-sans`、
+  代码字体钩子 `--font-mono-override` 与底色变量 `--cds-surface-*` 均来自远程
+  `claude.ai`；打包路径 `.vite/build/mainView.js`、`ElectronAsarIntegrity` 机制及
+  Electron fuse 配置来自当前桌面版构建。上述任一项发生变化，都可能导致修改失效，
+  需等待 Clfont 更新。
 - **无法覆盖 CSS 通用字体关键字。** `system-ui`、`-apple-system`、`sans-serif`
   等为 CSS 关键字，`@font-face` 不接受将其作为字体族名称，因此使用此类字体栈的
-  区域，中文仍由系统默认字体渲染。Claude 自身的字体栈以 `anthropic-sans` 起始，
-  实际测试中未出现此情况。
+  区域，中文仍由系统默认字体渲染。Claude 自身的字体栈经由 `--font-anthropic-sans`
+  等变量给出，实际测试中未出现此情况。
 
 ## 问题反馈
 
