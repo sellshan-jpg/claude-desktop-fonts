@@ -564,16 +564,16 @@ def test_detects_blocked_claude_updates():
         # 远早于任何一次 install 的历史记录
         (logs / "main1.log").write_text(f"2020-01-01 00:00:00 [error] [updater] {err}\n")
         _, out = sb.run("status")
-        ok("Claude 更新被挡" not in out, "未打补丁时不该报更新被挡")
+        ok("Claude 更新被拒绝" not in out, "未打补丁时不该报更新被挡")
 
         sb.run("install", "--yes", "--scope", "cjk")
         _, out = sb.run("status")
-        ok("Claude 更新被挡" not in out, "只有 install 之前的历史记录时不该误报")
+        ok("Claude 更新被拒绝" not in out, "只有 install 之前的历史记录时不该误报")
 
         # install 之后才发生的失败
         (logs / "main.log").write_text(f"2099-12-31 23:59:59 [error] [updater] {err}\n")
         _, out = sb.run("status")
-        contains(out, "Claude 更新被挡", "install 之后被挡的更新必须报出来")
+        contains(out, "Claude 更新被拒绝", "install 之后被挡的更新必须报出来")
         contains(out, "2099-12-31 23:59:59", "应带上最近一次的时间")
     finally:
         sb.cleanup()

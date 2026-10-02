@@ -75,7 +75,7 @@ final class Copy: ObservableObject {
         "help.step9.body": "保持「标准」即可。若个别区域的字体未跟随变化，再切换至「扩展」，此时会多覆盖一批常见字体。",
 
         "help.step10.title": "更新 Claude",
-        "help.step10.body": "应用字体需要为 Claude 重新签名，而 Claude 的更新程序只接受带原始签名的新版本，因此补丁在时自动更新会被拒绝，且 Claude 自己不会就此给出任何提示。\n程序会读取 Claude 的日志，检测到被拒绝的更新时在主界面提示，并提供「更新 Claude」的引导流程：先还原，待 Claude 自行装完更新，再把字体设置重新应用回去。设置不会丢失。\n若从官网重新下载覆盖安装，补丁同样失效，此时主界面会给出「重新应用」按钮。",
+        "help.step10.body": "应用字体需为 Claude 重新签名，而 Claude 的更新程序仅接受带有原始签名的新版本，因此补丁存在期间自动更新将被拒绝，且 Claude 不会就此给出任何提示。\n程序会读取 Claude 的日志，检测到被拒绝的更新时在主界面给出提示，并提供「更新 Claude」引导流程：先执行还原，待 Claude 完成更新后，再重新应用字体设置。设置不会丢失。\n若从官网重新下载并覆盖安装，补丁同样失效，此时主界面将给出「重新应用」入口。",
         "help.step11.title": "Claude 安装在其他位置",
         "help.step11.body": "若 Claude 不在「应用程序」文件夹，在上方的目标列表中选择「其他位置」，再指向对应的 Claude.app。\n该位置会被记住，与正式 Claude、测试 Claude 并列，各自独立记录已应用的设置。不再需要时点「移出列表」，仅从列表中移除，不会删除应用本身。",
         "help.step12.title": "还原与自检",
@@ -102,16 +102,16 @@ final class Copy: ObservableObject {
         "stale.title": "Claude 已更新，此前应用的设置已失效",
         "sheet.apply.costs": "应用后以下功能将不可用",
         "sheet.apply.c1": "通行密钥与 Microsoft 账号登录可能无法完成验证",
-        "sheet.apply.c2": "Projects 中的「添加本地文件夹」——该功能依赖设备注册",
-        "sheet.apply.c3": "Claude 的自动更新会被拒绝，更新前需先「还原」",
+        "sheet.apply.c2": "Projects 中的「添加本地文件夹」（该功能依赖设备注册）",
+        "sheet.apply.c3": "Claude 的自动更新将被拒绝，更新前需先执行「还原」",
         "sheet.apply.undo": "以上均源于重新签名，执行「还原」即可全部恢复。",
-        "blocked.title": "Claude 有更新装不上",
-        "blocked.body": "应用字体需要为 Claude 重新签名，而 Claude 的更新程序只接受带原始签名的新版本，因此补丁在时更新会被拒绝——Claude 自己不会就此给出任何提示。要更新 Claude，需先还原，待其装完更新后再把字体应用回去。",
+        "blocked.title": "Claude 的更新无法安装",
+        "blocked.body": "应用字体需为 Claude 重新签名，而 Claude 的更新程序仅接受带有原始签名的新版本，因此补丁存在期间更新将被拒绝，且 Claude 不会就此给出任何提示。如需更新 Claude，请先执行还原，待其完成更新后重新应用字体设置。",
         "blocked.action": "更新 Claude",
         "flow.title": "更新 Claude",
-        "flow.intro": "将先把 Claude 还原为原始状态，待其完成更新后，再把当前的字体设置重新应用回去。设置不会丢失。",
+        "flow.intro": "将先把 Claude 还原为原始状态，待其完成更新后，再重新应用当前的字体设置。设置不会丢失。",
         "flow.s1": "还原 Claude 到原始状态",
-        "flow.s2": "在 Claude 中完成更新，随后完全退出（⌘Q）——更新在退出时才会装上。当前版本 {v}",
+        "flow.s2": "在 Claude 中完成更新，随后完全退出（⌘Q）。更新于退出时写入，不退出则不会生效。当前版本 {v}",
         "flow.s2.done": "已更新到 {v}",
         "flow.s3": "重新应用字体设置",
         "flow.open": "打开 Claude",
@@ -333,7 +333,7 @@ final class Copy: ObservableObject {
         "help.step9.body": "Leave this on Standard. If some corner of the interface keeps its old font, switch to Extended, which applies the same rules across a wider set of font families.",
 
         "help.step10.title": "Updating Claude",
-        "help.step10.body": "Applying fonts means re-signing Claude, and Claude's updater only accepts a new version carrying the original signature — so while the patch is in place, automatic updates are refused, and Claude itself says nothing about it.\nClfont reads Claude's log, says so in the main window when it spots a refused update, and offers an Update Claude flow: restore first, let Claude install the update itself, then apply your font settings again. Nothing you chose is lost.\nReinstalling over the top from the website also removes the patch, and the main window then offers a Re-apply button.",
+        "help.step10.body": "Applying fonts requires re-signing Claude, and Claude's updater accepts only a new version carrying the original signature. While the patch is in place, automatic updates are therefore refused, and Claude gives no indication of this.\nClfont reads Claude's log and, on finding a refused update, reports it in the main window and offers the Update Claude flow: restore first, allow Claude to install the update, then reapply your font settings. Nothing you chose is lost.\nReinstalling over the top from the website also removes the patch, in which case the main window offers a Re-apply button.",
         "help.step11.title": "Claude installed somewhere else",
         "help.step11.body": "If your Claude lives outside the Applications folder, pick Other location in the target list above and point Clfont at the Claude.app.\nThat location is remembered alongside the main and test Claude, each keeping its own record of what has been applied. Remove from list takes it off the list only; the app itself is left where it is.",
         "help.step12.title": "Restore and Diagnose",
@@ -358,16 +358,16 @@ final class Copy: ObservableObject {
         "stale.title": "Claude updated and your settings were lost",
         "sheet.apply.costs": "What stops working once applied",
         "sheet.apply.c1": "Passkey and Microsoft account sign-in may fail to verify",
-        "sheet.apply.c2": "Attaching a local folder in Projects — it relies on device registration",
+        "sheet.apply.c2": "Attaching a local folder in Projects, which relies on device registration",
         "sheet.apply.c3": "Claude's automatic updates are refused; restore before updating",
         "sheet.apply.undo": "All three come from re-signing, and Restore brings them back.",
         "blocked.title": "A Claude update cannot install",
-        "blocked.body": "Applying fonts means re-signing Claude, and Claude's updater only accepts a new version carrying the original signature — so while the patch is in place, updates are refused, and Claude itself says nothing about it. To update Claude, restore it first, let the update install, then apply your fonts again.",
+        "blocked.body": "Applying fonts requires re-signing Claude, and Claude's updater accepts only a new version carrying the original signature. While the patch is in place, updates are therefore refused, and Claude gives no indication of this. To update Claude, restore it first, allow the update to install, then apply your font settings again.",
         "blocked.action": "Update Claude",
         "flow.title": "Update Claude",
-        "flow.intro": "Clfont restores Claude to its original state, waits for the update to install, then applies your current font settings again. Nothing you chose is lost.",
+        "flow.intro": "Clfont restores Claude to its original state, waits for the update to install, then reapplies your current font settings. Nothing you chose is lost.",
         "flow.s1": "Restore Claude to its original state",
-        "flow.s2": "Let the update finish in Claude, then quit it completely (⌘Q) — the update installs on quit. Currently on {v}",
+        "flow.s2": "Allow the update to finish in Claude, then quit it completely (⌘Q). The update is written on quit and will not take effect until then. Current version {v}",
         "flow.s2.done": "Updated to {v}",
         "flow.s3": "Apply your font settings again",
         "flow.open": "Open Claude",
@@ -748,19 +748,19 @@ let releaseNotes: [ReleaseNote] = [
     ReleaseNote(
         version: "6.1",
         zh: [
-            "新增「更新 Claude」引导流程。补丁在时 Claude 装不上自动更新，而 Claude 自己不会就此给出任何提示；现在会读取其日志，在主界面标出被拒绝的更新，并一键完成「还原 → 等 Claude 装完更新 → 重新应用字体」，设置不会丢失。",
-            "应用前的确认弹窗会列出重新签名的代价：通行密钥与 Microsoft 账号登录、Projects 中的「添加本地文件夹」、以及 Claude 的自动更新。此前这三项是在用户不知情的情况下失效的。",
-            "说明文档补上两项此前未写明的影响：自动更新会被拒绝，以及设备注册失效导致 Projects 无法添加本地文件夹。两者均源于重新签名，执行「还原」即可恢复。",
-            "签名校验失败时会一并输出 codesign 给出的原因，便于区分磁盘空间、文件被占用与权限问题。此前只报「验证未通过」，无从排查。",
+            "新增「更新 Claude」引导流程。补丁存在期间 Claude 无法安装自动更新，且不会就此给出任何提示。现程序会读取其日志，在主界面标出被拒绝的更新，并引导完成「还原 → 等待 Claude 更新 → 重新应用字体」，设置不会丢失。",
+            "应用前的确认窗口将列出重新签名的代价：通行密钥与 Microsoft 账号登录、Projects 中的「添加本地文件夹」，以及 Claude 的自动更新。此前这三项均在用户未被告知的情况下失效。",
+            "说明文档补充两项此前未写明的影响：自动更新将被拒绝，以及设备注册失效导致 Projects 无法添加本地文件夹。两者均源于重新签名，执行「还原」即可恢复。",
+            "签名校验失败时将一并输出 codesign 给出的原因，以区分磁盘空间不足、文件被占用与权限不足等情形。此前仅提示「验证未通过」，无从排查。",
         ],
         en: [
-            "Added an Update Claude flow. While the patch is in place Claude cannot install its own updates, and Claude says nothing about it; Clfont now reads its log, flags the refused update in the main window, and walks you through restore → let Claude update → apply your fonts again, with nothing lost.",
-            "The confirmation before applying now lists what re-signing costs you: passkey and Microsoft sign-in, attaching a local folder in Projects, and Claude's automatic updates. All three used to break without anyone being told.",
-            "The documentation now covers two effects it had been silent about: updates being refused, and device registration breaking so Projects cannot attach a local folder. Both come from re-signing, and Restore brings them back.",
-            "When signature verification fails, codesign's own explanation is now included — enough to tell a full disk from a locked file from a permission problem. It used to say only that verification failed.",
+            "Added an Update Claude flow. While the patch is in place, Claude cannot install its own updates and gives no indication of this. Clfont now reads its log, reports the refused update in the main window, and guides you through restore → wait for Claude to update → reapply your fonts, with nothing lost.",
+            "The confirmation before applying now lists what re-signing costs you: passkey and Microsoft sign-in, attaching a local folder in Projects, and Claude's automatic updates. All three previously failed without the user being told.",
+            "The documentation now covers two effects it had been silent about: updates being refused, and device registration failing so that Projects cannot attach a local folder. Both follow from re-signing, and Restore brings them back.",
+            "When signature verification fails, codesign's own explanation is now included, distinguishing a full disk from a locked file or insufficient permissions. It previously reported only that verification had failed.",
         ],
-        actionZH: "若此前已为 Claude 应用过字体，打开 Clfont 查看是否有被拒绝的更新；有的话走一次「更新 Claude」即可补上。",
-        actionEN: "If you have applied fonts before, open Clfont and see whether an update was refused; if so, one pass through Update Claude catches you up."),
+        actionZH: "若此前已为 Claude 应用过字体，请打开 Clfont 查看是否存在被拒绝的更新；如有，执行一次「更新 Claude」即可。",
+        actionEN: "If you have applied fonts before, open Clfont to see whether an update was refused; if so, a single pass through Update Claude brings you up to date."),
     ReleaseNote(
         version: "6.0",
         zh: [
@@ -866,7 +866,7 @@ enum CLIMarker {
     static let signBad = "codesign -v：未通过"
     static let hashBad = "asar 完整性哈希：不匹配"
     static let stale = "补丁已失效"
-    static let updateBlocked = "Claude 更新被挡"
+    static let updateBlocked = "Claude 更新被拒绝"
     static let helperMissing = "Helper 权限：缺失"
     static let version = "Claude 版本："
     static let backups = "整包备份："
