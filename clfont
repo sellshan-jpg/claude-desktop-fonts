@@ -1123,7 +1123,19 @@ def is_adhoc_signed():
 # ----------------------------------------------- entitlements
 
 # 与开发者身份绑定的 entitlement。ad-hoc 签名既没有 team 也没有描述文件，
-# 这些项留着不会生效，反而可能让 AMFI 连整份 entitlement 一起拒掉。
+# 这些项留着不只是不生效——app 会直接起不来。
+#
+# 2026-10-02 实测：把原版完整 entitlements（含
+# keychain-access-groups: Q6L2SF6YDW.com.anthropic.claude.hwkey 等）原样签回已打
+# 补丁的 Claude，codesign 接受、codesign -v 通过、条目确实写进了签名，但启动时
+# AMFI 在 spawn 阶段拒绝：
+#     Launch failed. Launchd job spawn failed（NSPOSIXErrorDomain Code=163）
+# 所以剔除是必须的，没有选择余地。
+#
+# 代价：keychain-access-groups 里的 com.anthropic.claude.hwkey 一并丢失，设备注册
+# 所用的 Secure Enclave 密钥随之不可达，Claude 日志持续出现 enclave key
+# unavailable，Projects 的「添加本地文件夹」因此失败。这一项绕不开——访问组带
+# Q6L2SF6YDW 前缀，没有 Anthropic 的证书就拿不到。
 ENT_DROP = {"com.apple.application-identifier", "keychain-access-groups"}
 ENT_DROP_PREFIX = ("com.apple.developer.",)
 

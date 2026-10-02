@@ -237,7 +237,8 @@ signature it applies is ad-hoc. That has consequences:
   original `keychain-access-groups` entitlement includes
   `Q6L2SF6YDW.com.anthropic.claude.hwkey`, the access group holding the Secure
   Enclave key used to register this machine with your account. Ad-hoc signing
-  forces that entitlement to be dropped, the key becomes unreachable, Claude's log
+  forces that entitlement to be dropped — signing it back verbatim was tested,
+  and AMFI then refuses to spawn Claude at all — so the key becomes unreachable, Claude's log
   fills with `enclave key unavailable`, and the interface reports that this
   computer is not connected to your account — which is what makes Add folder
   fail.

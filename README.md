@@ -192,7 +192,8 @@ runtime，并声明了一组 entitlements。由于修改 `app.asar` 后必须重
   提供「还原 → 更新 Claude → 重新应用」的引导流程。
 - **设备注册失效，Projects 无法添加本地文件夹。** 原版 entitlements 中的
   `keychain-access-groups` 含 `Q6L2SF6YDW.com.anthropic.claude.hwkey`，设备注册所用
-  的 Secure Enclave 密钥存放于该访问组。ad-hoc 签名下该条目必须剔除，密钥随之不可
+  的 Secure Enclave 密钥存放于该访问组。ad-hoc 签名下该条目必须剔除——实测把它原样签回去会让
+  Claude 在 AMFI 的 spawn 阶段被拒、根本无法启动——密钥随之不可
   达，Claude 日志中持续出现 `enclave key unavailable`，界面提示「这台电脑尚未连接
   到你的账户」，Projects 中的「添加文件夹」因此失败。
 
