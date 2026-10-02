@@ -74,8 +74,8 @@ final class Copy: ObservableObject {
         "help.step9.title": "兼容模式",
         "help.step9.body": "保持「标准」即可。若个别区域的字体未跟随变化，再切换至「扩展」，此时会多覆盖一批常见字体。",
 
-        "help.step10.title": "Claude 更新后需重新应用",
-        "help.step10.body": "Claude 的自动更新会重写应用内容，此前应用的字体随之失效。程序检测到该情况时会在主界面提示，并附「重新应用」按钮，点击即可恢复，字体设置无需重选。",
+        "help.step10.title": "更新 Claude",
+        "help.step10.body": "应用字体需要为 Claude 重新签名，而 Claude 的更新程序只接受带原始签名的新版本，因此补丁在时自动更新会被拒绝，且 Claude 自己不会就此给出任何提示。\n程序会读取 Claude 的日志，检测到被拒绝的更新时在主界面提示，并提供「更新 Claude」的引导流程：先还原，待 Claude 自行装完更新，再把字体设置重新应用回去。设置不会丢失。\n若从官网重新下载覆盖安装，补丁同样失效，此时主界面会给出「重新应用」按钮。",
         "help.step11.title": "Claude 安装在其他位置",
         "help.step11.body": "若 Claude 不在「应用程序」文件夹，在上方的目标列表中选择「其他位置」，再指向对应的 Claude.app。\n该位置会被记住，与正式 Claude、测试 Claude 并列，各自独立记录已应用的设置。不再需要时点「移出列表」，仅从列表中移除，不会删除应用本身。",
         "help.step12.title": "还原与自检",
@@ -100,6 +100,23 @@ final class Copy: ObservableObject {
         "update.later": "稍后",
         "stale.body": "Claude 的自动更新会重写应用内容，此前应用的设置随之失效。重新应用一次即可恢复，设置无需重新选择。",
         "stale.title": "Claude 已更新，此前应用的设置已失效",
+        "sheet.apply.costs": "应用后以下功能将不可用",
+        "sheet.apply.c1": "通行密钥与 Microsoft 账号登录可能无法完成验证",
+        "sheet.apply.c2": "Projects 中的「添加本地文件夹」——该功能依赖设备注册",
+        "sheet.apply.c3": "Claude 的自动更新会被拒绝，更新前需先「还原」",
+        "sheet.apply.undo": "以上均源于重新签名，执行「还原」即可全部恢复。",
+        "blocked.title": "Claude 有更新装不上",
+        "blocked.body": "应用字体需要为 Claude 重新签名，而 Claude 的更新程序只接受带原始签名的新版本，因此补丁在时更新会被拒绝——Claude 自己不会就此给出任何提示。要更新 Claude，需先还原，待其装完更新后再把字体应用回去。",
+        "blocked.action": "更新 Claude",
+        "flow.title": "更新 Claude",
+        "flow.intro": "将先把 Claude 还原为原始状态，待其完成更新后，再把当前的字体设置重新应用回去。设置不会丢失。",
+        "flow.s1": "还原 Claude 到原始状态",
+        "flow.s2": "在 Claude 中完成更新，随后完全退出（⌘Q）——更新在退出时才会装上。当前版本 {v}",
+        "flow.s2.done": "已更新到 {v}",
+        "flow.s3": "重新应用字体设置",
+        "flow.open": "打开 Claude",
+        "flow.start": "开始",
+        "flow.reapply": "重新应用",
         "helper.body": "早期版本的 Clfont 在重新签名时会一并清除 Claude 内部组件的系统权限，导致 Cowork、虚拟机等功能不可用。重新应用一次，程序会从完整备份还原后再进行修改；若没有可用备份，请重新下载安装 Claude。",
         "helper.title": "检测到早期版本遗留的权限缺失",
 
@@ -315,8 +332,8 @@ final class Copy: ObservableObject {
         "help.step9.title": "Compatibility",
         "help.step9.body": "Leave this on Standard. If some corner of the interface keeps its old font, switch to Extended, which applies the same rules across a wider set of font families.",
 
-        "help.step10.title": "Re-apply after Claude updates",
-        "help.step10.body": "A Claude update rewrites the app, and your fonts go with it. Clfont notices and says so in the main window, with a Re-apply button next to it. One click and you're back — your settings were never lost.",
+        "help.step10.title": "Updating Claude",
+        "help.step10.body": "Applying fonts means re-signing Claude, and Claude's updater only accepts a new version carrying the original signature — so while the patch is in place, automatic updates are refused, and Claude itself says nothing about it.\nClfont reads Claude's log, says so in the main window when it spots a refused update, and offers an Update Claude flow: restore first, let Claude install the update itself, then apply your font settings again. Nothing you chose is lost.\nReinstalling over the top from the website also removes the patch, and the main window then offers a Re-apply button.",
         "help.step11.title": "Claude installed somewhere else",
         "help.step11.body": "If your Claude lives outside the Applications folder, pick Other location in the target list above and point Clfont at the Claude.app.\nThat location is remembered alongside the main and test Claude, each keeping its own record of what has been applied. Remove from list takes it off the list only; the app itself is left where it is.",
         "help.step12.title": "Restore and Diagnose",
@@ -339,6 +356,23 @@ final class Copy: ObservableObject {
         "stale.action": "Re-apply",
         "stale.body": "A Claude update rewrote the app and took your settings with it. Re-apply to get them back; nothing you chose was lost.",
         "stale.title": "Claude updated and your settings were lost",
+        "sheet.apply.costs": "What stops working once applied",
+        "sheet.apply.c1": "Passkey and Microsoft account sign-in may fail to verify",
+        "sheet.apply.c2": "Attaching a local folder in Projects — it relies on device registration",
+        "sheet.apply.c3": "Claude's automatic updates are refused; restore before updating",
+        "sheet.apply.undo": "All three come from re-signing, and Restore brings them back.",
+        "blocked.title": "A Claude update cannot install",
+        "blocked.body": "Applying fonts means re-signing Claude, and Claude's updater only accepts a new version carrying the original signature — so while the patch is in place, updates are refused, and Claude itself says nothing about it. To update Claude, restore it first, let the update install, then apply your fonts again.",
+        "blocked.action": "Update Claude",
+        "flow.title": "Update Claude",
+        "flow.intro": "Clfont restores Claude to its original state, waits for the update to install, then applies your current font settings again. Nothing you chose is lost.",
+        "flow.s1": "Restore Claude to its original state",
+        "flow.s2": "Let the update finish in Claude, then quit it completely (⌘Q) — the update installs on quit. Currently on {v}",
+        "flow.s2.done": "Updated to {v}",
+        "flow.s3": "Apply your font settings again",
+        "flow.open": "Open Claude",
+        "flow.start": "Start",
+        "flow.reapply": "Apply again",
         "appmgmt.body": "Changing Claude's app bundle needs the App Management permission. macOS asks the first time you apply. If you turned it down, use the button below, switch Clfont on, and try again.",
         "appmgmt.open": "Open App Management settings",
         "appmgmt.recheck": "Enabled, check again",
@@ -712,6 +746,22 @@ struct ReleaseNote: Identifiable {
 
 let releaseNotes: [ReleaseNote] = [
     ReleaseNote(
+        version: "6.1",
+        zh: [
+            "新增「更新 Claude」引导流程。补丁在时 Claude 装不上自动更新，而 Claude 自己不会就此给出任何提示；现在会读取其日志，在主界面标出被拒绝的更新，并一键完成「还原 → 等 Claude 装完更新 → 重新应用字体」，设置不会丢失。",
+            "应用前的确认弹窗会列出重新签名的代价：通行密钥与 Microsoft 账号登录、Projects 中的「添加本地文件夹」、以及 Claude 的自动更新。此前这三项是在用户不知情的情况下失效的。",
+            "说明文档补上两项此前未写明的影响：自动更新会被拒绝，以及设备注册失效导致 Projects 无法添加本地文件夹。两者均源于重新签名，执行「还原」即可恢复。",
+            "签名校验失败时会一并输出 codesign 给出的原因，便于区分磁盘空间、文件被占用与权限问题。此前只报「验证未通过」，无从排查。",
+        ],
+        en: [
+            "Added an Update Claude flow. While the patch is in place Claude cannot install its own updates, and Claude says nothing about it; Clfont now reads its log, flags the refused update in the main window, and walks you through restore → let Claude update → apply your fonts again, with nothing lost.",
+            "The confirmation before applying now lists what re-signing costs you: passkey and Microsoft sign-in, attaching a local folder in Projects, and Claude's automatic updates. All three used to break without anyone being told.",
+            "The documentation now covers two effects it had been silent about: updates being refused, and device registration breaking so Projects cannot attach a local folder. Both come from re-signing, and Restore brings them back.",
+            "When signature verification fails, codesign's own explanation is now included — enough to tell a full disk from a locked file from a permission problem. It used to say only that verification failed.",
+        ],
+        actionZH: "若此前已为 Claude 应用过字体，打开 Clfont 查看是否有被拒绝的更新；有的话走一次「更新 Claude」即可补上。",
+        actionEN: "If you have applied fonts before, open Clfont and see whether an update was refused; if so, one pass through Update Claude catches you up."),
+    ReleaseNote(
         version: "6.0",
         zh: [
             "不再需要 Xcode 命令行工具。命令行部分已重写并编入应用包，安装后即可直接使用。",
@@ -808,11 +858,15 @@ let releaseNotes: [ReleaseNote] = [
 
 /// 这些**不是界面文案**，是 CLI（clfont，Python）输出里用来解析状态的字面量。
 /// 界面切成英文时它们必须原样不动——改动前请同步改 CLI，两边一起改。
+/// 引导更新流程的阶段。用 Int 比大小判断「走到第几步」，顺序即语义。
+enum FlowStep: Int { case idle = 0, restoring, waiting, updated, reapplying, done }
+
 enum CLIMarker {
     static let patched = "已打补丁"
     static let signBad = "codesign -v：未通过"
     static let hashBad = "asar 完整性哈希：不匹配"
     static let stale = "补丁已失效"
+    static let updateBlocked = "Claude 更新被挡"
     static let helperMissing = "Helper 权限：缺失"
     static let version = "Claude 版本："
     static let backups = "整包备份："
@@ -871,6 +925,9 @@ struct AppStatus {
     var integrityOK = true
     /// Claude 自己更新过，此前应用的字体被覆盖掉了，需要重新应用一次
     var stale = false
+    /// Claude 想装的更新被我们的 ad-hoc 签名挡住了（见 CLI 的 UpdateBlock）。
+    /// 失败只写进 Claude 自己的日志，它界面上不会说，所以必须由我们说。
+    var updateBlocked = false
     /// 嵌套 Helper 的权限是否完整（旧版重签名会把它抹掉，Cowork 等功能会失效）
     var helperOK = true
     var backups: [String] = []
@@ -1286,6 +1343,7 @@ final class OutputBox: @unchecked Sendable {
             s.signOK = !out.contains(CLIMarker.signBad)
             s.integrityOK = !out.contains(CLIMarker.hashBad)
             s.stale = out.contains(CLIMarker.stale)
+            s.updateBlocked = out.contains(CLIMarker.updateBlocked)
             s.helperOK = !out.contains(CLIMarker.helperMissing)
             if let r = out.range(of: CLIMarker.version) {
                 s.version = String(out[r.upperBound...].prefix { !$0.isNewline })
@@ -1401,12 +1459,13 @@ final class OutputBox: @unchecked Sendable {
         }
     }
 
-    func uninstall() {
+    func uninstall(done: (@MainActor (Bool) -> Void)? = nil) {
         let tgt = target
         exec(["uninstall", "-y"], on: tgt, label: t("busy.uninstall", ["{target}": tgt.label])) {
-            [weak self] _, out in
+            [weak self] code, out in
             self?.noteAppMgmt(out)
             self?.refresh(tgt)
+            done?(code == 0)
         }
     }
 
@@ -1692,6 +1751,9 @@ struct ContentView: View {
     @State private var showRestart = false
     @State private var showHelp = false
     @State private var showWhatsNew = false
+    @State private var showUpdateFlow = false
+    @State private var flowStep = FlowStep.idle
+    @State private var flowBaseVersion = ""
     @StateObject private var updates = UpdateWatcher()
     /// 底色只在浅色模式生效。此刻正处于深色模式的话，用户选完、应用完什么都
     /// 不会发生——文案里写了「仅在浅色模式生效」也不够，得当场说。
@@ -1735,7 +1797,7 @@ struct ContentView: View {
     }
 
     private var sheetOpen: Bool {
-        confirmRestore || showHelp || showWhatsNew
+        confirmRestore || showHelp || showWhatsNew || showUpdateFlow
             || confirmApply || showApplying || showRestart
     }
 
@@ -1774,6 +1836,7 @@ struct ContentView: View {
         .overlay { if showRestart { restartSheet } }
         .overlay { if showHelp { helpSheet } }
         .overlay { if showWhatsNew { whatsNewSheet } }
+        .overlay { if showUpdateFlow { updateFlowSheet } }
     }
 
     var body: some View {
@@ -1804,6 +1867,8 @@ struct ContentView: View {
         .animation(DS.pop, value: showRestart)
         .animation(DS.pop, value: showHelp)
         .animation(DS.pop, value: showWhatsNew)
+        .animation(DS.pop, value: showUpdateFlow)
+        .animation(DS.ease, value: flowStep)
         .alert(t("sheet.delete.title"), isPresented: $confirmRemove) {
             Button(t("sheet.cancel"), role: .cancel) {}
             Button(t("sheet.delete.ok"), role: .destructive) { m.removeTestCopy() }
@@ -1840,6 +1905,120 @@ struct ContentView: View {
         .ignoresSafeArea()
     }
 
+
+    /// 补丁在时 Claude 装不上更新：我们必须重签名，ad-hoc 签名的指定要求退化成
+    /// 只认当前 cdhash，Squirrel 拿它去校验下载来的新版必然不过。失败只写进 Claude
+    /// 自己的日志，它界面上什么都不说——不主动提示的话，用户会被静默卡在旧版。
+    private var updateBlockedNotice: some View {
+        NoticeCard(tint: DS.prod, symbol: "arrow.down.circle",
+                   title: t("blocked.title"), message: t("blocked.body")) {
+            Button(t("blocked.action")) { startGuidedUpdate() }
+                .buttonStyle(.glassProminent).tint(DS.prod)
+                .buttonBorderShape(.capsule)
+                .disabled(busyNow)
+                .padding(.top, 2)
+        }
+    }
+
+    private func startGuidedUpdate() {
+        flowBaseVersion = m.current.version
+        flowStep = .idle
+        showUpdateFlow = true
+    }
+
+    /// 还原 → 等 Claude 自己装完更新 → 把字体应用回去。
+    /// 中间那步必须由用户来：更新要等 Claude 下载完、并在退出时才真正装上，
+    /// 我们只能轮询版本号来判断装完没有。
+    private var updateFlowSheet: some View {
+        ZStack {
+            scrim { if flowStep != .restoring && flowStep != .reapplying { showUpdateFlow = false } }
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(t("flow.title"))
+                        .font(.system(size: 15, weight: .semibold)).tracking(-0.15)
+                    Text(t("flow.intro"))
+                        .font(.system(size: 12.5)).foregroundStyle(.secondary)
+                        .lineSpacing(2.5).fixedSize(horizontal: false, vertical: true)
+                }
+                VStack(alignment: .leading, spacing: 10) {
+                    flowRow(1, t("flow.s1"), done: flowStep.rawValue > FlowStep.restoring.rawValue,
+                            busy: flowStep == .restoring)
+                    flowRow(2, flowStep.rawValue >= FlowStep.updated.rawValue
+                               ? t("flow.s2.done", ["{v}": m.current.version])
+                               : t("flow.s2", ["{v}": flowBaseVersion]),
+                            done: flowStep.rawValue >= FlowStep.updated.rawValue,
+                            busy: flowStep == .waiting)
+                    flowRow(3, t("flow.s3"), done: flowStep == .done, busy: flowStep == .reapplying)
+                }
+                .padding(.vertical, 2)
+                HStack(spacing: 9) {
+                    if flowStep == .waiting {
+                        Button(t("flow.open")) { m.openTarget() }
+                            .buttonStyle(.glass).controlSize(.large)
+                    }
+                    Spacer()
+                    switch flowStep {
+                    case .idle:
+                        Button(t("flow.start")) {
+                            flowStep = .restoring
+                            m.uninstall { okRestore in
+                                flowStep = okRestore ? .waiting : .idle
+                                if okRestore { m.openTarget() }
+                            }
+                        }
+                        .buttonStyle(.glassProminent).tint(DS.prod).controlSize(.large)
+                    case .updated:
+                        Button(t("flow.reapply")) {
+                            flowStep = .reapplying
+                            m.install { okInstall in flowStep = okInstall ? .done : .updated }
+                        }
+                        .buttonStyle(.glassProminent).tint(DS.accent).controlSize(.large)
+                    default:
+                        EmptyView()
+                    }
+                    Button(t("sheet.close")) { showUpdateFlow = false }
+                        .buttonStyle(.glass).controlSize(.large)
+                        .disabled(flowStep == .restoring || flowStep == .reapplying)
+                }
+            }
+            .padding(.horizontal, 24).padding(.top, 22).padding(.bottom, 18)
+            .frame(width: 460)
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .shadow(color: .black.opacity(0.3), radius: 25, y: 22)
+            .transition(.scale(scale: 0.96).combined(with: .opacity))
+        }
+        // 等 Claude 装完更新：版本号变了就是装上了。更新在退出 Claude 时才真正落盘，
+        // 所以这里只能轮询，没有可订阅的事件。
+        .onReceive(Timer.publish(every: 6, on: .main, in: .common).autoconnect()) { _ in
+            guard flowStep == .waiting else { return }
+            m.refresh(.production) {
+                if !m.current.version.isEmpty, m.current.version != "—",
+                   m.current.version != flowBaseVersion { flowStep = .updated }
+            }
+        }
+    }
+
+    private func flowRow(_ n: Int, _ text: String, done: Bool, busy: Bool) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            ZStack {
+                Circle().fill(done ? DS.success.opacity(0.16)
+                                   : Color.secondary.opacity(0.12)).frame(width: 22, height: 22)
+                if done {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .bold)).foregroundStyle(DS.success)
+                } else if busy {
+                    ProgressView().controlSize(.small).scaleEffect(0.55)
+                } else {
+                    Text("\(n)").font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Text(text).font(.system(size: 12.5))
+                .foregroundStyle(done ? .secondary : .primary)
+                .lineSpacing(2).fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+    }
 
     /// Claude 的自动更新会重写 app.asar，此前应用的字体随之消失。用户看到的
     /// 只是「字体自己变回去了」，不主动说明的话，多半会以为是本软件出了问题。
@@ -1908,6 +2087,7 @@ struct ContentView: View {
             if m.appMgmtDenied { appMgmtNotice }
             if m.current.loaded && !m.current.missing {
                 if m.current.stale { staleNotice }
+                if m.current.updateBlocked { updateBlockedNotice }
                 if !m.current.helperOK { helperNotice }
             }
             if let r = updates.available { updateNotice(r) }
@@ -3080,6 +3260,29 @@ struct ContentView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
+                // 重签名会丢掉与开发者身份绑定的那部分能力。用户此前是在不知情的
+                // 情况下用掉这些功能的——装之前就该把账摆出来。
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(t("sheet.apply.costs"))
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(DS.prod)
+                    ForEach([t("sheet.apply.c1"), t("sheet.apply.c2"), t("sheet.apply.c3")],
+                            id: \.self) { line in
+                        HStack(alignment: .top, spacing: 6) {
+                            Text("·").font(.system(size: 11.5)).foregroundStyle(.secondary)
+                            Text(line).font(.system(size: 11.5)).foregroundStyle(.secondary)
+                                .lineSpacing(2).fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    Text(t("sheet.apply.undo"))
+                        .font(.system(size: 11)).foregroundStyle(.tertiary)
+                        .padding(.top, 1)
+                }
+                .padding(11)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(DS.prod.opacity(0.09)))
+
                 HStack(spacing: 9) {
                     Spacer()
                     Button(t("sheet.cancel")) { confirmApply = false }
@@ -3089,7 +3292,7 @@ struct ContentView: View {
                 }
             }
             .padding(.horizontal, 24).padding(.top, 22).padding(.bottom, 18)
-            .frame(width: 392)
+            .frame(width: 440)
             .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .shadow(color: .black.opacity(0.3), radius: 25, y: 22)
             .transition(.scale(scale: 0.96).combined(with: .opacity))

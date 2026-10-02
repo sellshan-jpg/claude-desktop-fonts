@@ -1220,7 +1220,21 @@ def resign():
 
     也不加 --options runtime：顶层是 ad-hoc（无 team），而各 Framework 仍由
     Anthropic 签名；开启 hardened runtime 会一并打开库校验，团队不匹配将导致
-    Electron Framework 加载失败。"""
+    Electron Framework 加载失败。
+    **刻意不带 -r。** ad-hoc 签名的隐式指定要求是 cdhash H"..."，只认这一份二进制。
+    Squirrel.Mac 装更新前会拿运行中 app 的指定要求去校验下载来的新版，新版 cdhash
+    必然不同，于是 Claude 的自动更新被彻底挡住，界面上还没有任何提示（2026-10-01
+    在一台机器上实测到 666 次 did not pass validation，用户被静默卡在旧版近三周）。
+
+    看上去只要 -r 写回原版那条指定要求就能修好——实测过，不行：
+      · 更新那半确实修好了：隔离实验台上，不带 -r 得到 did not pass validation，
+        带 -r 得到 Update downloaded and ready to install。
+      · 但钥匙串那半垮了：钥匙串 ACL 按 app 声明的指定要求评估访问者。声明成
+        Anthropic 那条，而我们是 ad-hoc 签名、永远满足不了，于是「始终允许」存
+        进去也不生效，每次启动 Claude 都要重新输登录密码。正式机实测对照：
+        cdhash 要求下重启不再弹；原版要求下重启必弹。
+    每次启动输密码比静默卡更新更难受，因此保持现状，改为检测并引导用户
+    「还原 → 更新 Claude → 重新应用」。"""
     ent = entitlements_for_resign()
     info("重签名顶层 bundle（" +
          ("保留原版 entitlements" if ent else "未取到原版 entitlements，将不带") +
@@ -1230,7 +1244,15 @@ def resign():
         cmd += ["--entitlements", str(ent)]
     run_cmd(cmd + [str(APP)])
     if not sign_valid():
-        raise RuntimeError("codesign -v 验证未通过")
+        # 验证失败时把 codesign 自己的说法带出来。只说「验证未通过」的话，用户和
+        # 维护者都无从下手——成因可能是磁盘写满、app 在只读卷上、残留的 Helper
+        # 进程占着文件、扩展属性异常等，彼此处理方式完全不同。
+        d = subprocess.run(["codesign", "-v", "--verbose=4", str(APP)],
+                           capture_output=True, text=True)
+        detail = (d.stdout + d.stderr).strip()
+        raise RuntimeError("codesign -v 验证未通过"
+                           + (f"\n    codesign 的说明：\n    " + detail.replace("\n", "\n    ")
+                              if detail else ""))
     ok("签名验证通过")
 
 
@@ -1781,6 +1803,49 @@ def cmd_css(args):
     sys.stdout.write(build_css(cfg.get("mode", "auto"), cfg))
 
 
+def claude_log_dir():
+    """Electron 按 app 名字把日志放在 ~/Library/Logs/Claude。
+    测试要能指到别处，否则会读到这台机器上真实的日志，输出随机器而变。"""
+    o = os.environ.get("CLFONT_CLAUDE_LOG_DIR")
+    return Path(o) if o else Path.home() / "Library/Logs/Claude"
+
+
+UPDATE_BLOCK_NEEDLE = "did not pass validation"
+
+
+def update_blocked(since):
+    """本次补丁生效之后被挡下的更新次数与最近一次时间；没有返回 None。
+
+    成因见 resign() 的说明：我们必须重签名，ad-hoc 签名的指定要求退化成只认当前
+    cdhash，而 Squirrel.Mac 装更新前会拿运行中 app 的指定要求去校验下载来的新版，
+    新版 cdhash 必然不同，于是每次检查都失败。失败只写进 Claude 自己的日志，界面
+    上没有任何提示，用户会被静默卡在旧版（实测有人卡了近三周）。
+
+    since 之前的记录一律不算——还原并更新过的机器日志里会留着旧的失败记录，拿它们
+    报警就成了误报。日志每行以 `2026-10-01 23:00:45` 开头，与 last_install 记录的
+    时间同格式，字符串比较即可当时间比较用。这里只读日志，不做任何写入。"""
+    d = claude_log_dir()
+    if not d.is_dir():
+        return None
+    count, last = 0, ""
+    for f in sorted(d.glob("main*.log")):
+        try:
+            text = f.read_text(errors="replace")
+        except OSError:
+            continue
+        for line in text.splitlines():
+            if UPDATE_BLOCK_NEEDLE not in line or len(line) < 19:
+                continue
+            t = line[:19]
+            if not t.startswith("20"):
+                continue
+            if since and t < since:
+                continue
+            count += 1
+            last = max(last, t)
+    return (count, last) if count else None
+
+
 def cmd_status(_args):
     cfg = load_config()
     version = claude_version()
@@ -1805,6 +1870,13 @@ def cmd_status(_args):
     if last.get("version") and last["version"] != version:
         bad(f"补丁已失效：Claude 已更新到 {version}"
             f"（上次应用于 {last['version']}），需要重新应用一次")
+    # Claude 的自动更新会被我们的 ad-hoc 签名挡住，且界面上没有任何提示。
+    # 这一行是 GUI 判断「提醒用户先还原再更新」的依据，措辞改动需同步 GUI。
+    if patched:
+        b = update_blocked(last.get("time", ""))
+        if b:
+            bad(f"Claude 更新被挡：已有 {b[0]} 次更新因签名校验失败被拒"
+                f"（最近 {b[1]}）。补丁在时装不上更新，需要先「还原」再更新 Claude")
     info(f"app.asar：{'存在' if ASAR.exists() else '不存在'}"
          f"，app.asar.bak（原版留底）：{'存在' if ASAR_BAK.exists() else '不存在'}")
     if ASAR.exists():
@@ -1934,6 +2006,12 @@ def cmd_doctor(_args):
         else:
             if is_patched():
                 ok("已打补丁（asar 内检测到注入标记）")
+                # 补丁在时 Claude 装不上更新，且只写进它自己的日志，界面无提示。
+                b = update_blocked(last_install_get(load_config()).get("time", ""))
+                if b:
+                    bad(f"Claude 更新被挡：已有 {b[0]} 次更新因签名校验失败被拒（最近 {b[1]}）。"
+                        "需要更新 Claude 时请先 clfont uninstall，等 Claude 自己装完更新，再重新 install")
+                    problems += 1
             elif ASAR_BAK.exists():
                 bad("app.asar.bak 存在但 asar 无补丁标记（半成品状态），"
                     "运行 clfont uninstall 可恢复")

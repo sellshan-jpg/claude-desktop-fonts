@@ -180,6 +180,17 @@ runtime，并声明了一组 entitlements。由于修改 `app.asar` 后必须重
 - **钥匙串重新授权。** 重新签名后首次启动时，系统会要求重新授权
   「Claude Safe Storage」。该弹窗可能连续出现多次（实测最多 4 次），每次输入登录
   密码并选择「始终允许」即可，属预期行为。
+- **Claude 的自动更新会被拒绝。** Squirrel 安装更新前，会用运行中应用的指定要求
+  （designated requirement）校验下载来的新版本。ad-hoc 签名的指定要求退化为
+  `cdhash H"..."`，只认当前这一份二进制，新版本的 cdhash 必然不同，校验永远失败。
+  失败只写入 Claude 自身日志，界面上没有任何提示——2026-10 实测一台机器上累计
+  666 次，用户被静默停留在旧版本近三周。Clfont 会读取该日志并在主界面提示，并
+  提供「还原 → 更新 Claude → 重新应用」的引导流程。
+- **设备注册失效，Projects 无法添加本地文件夹。** 原版 entitlements 中的
+  `keychain-access-groups` 含 `Q6L2SF6YDW.com.anthropic.claude.hwkey`，设备注册所用
+  的 Secure Enclave 密钥存放于该访问组。ad-hoc 签名下该条目必须剔除，密钥随之不可
+  达，Claude 日志中持续出现 `enclave key unavailable`，界面提示「这台电脑尚未连接
+  到你的账户」，Projects 中的「添加文件夹」因此失败。
 
 其余 entitlements 会被完整保留。修改只涉及 `Contents/Resources/app.asar` 与
 `Contents/Info.plist`，二者均由顶层签名封存，Claude 内部各组件（Helper、
@@ -224,8 +235,10 @@ Clfont 在首次修改前会创建完整应用备份，保存于
 
 ## 已知限制
 
-- **Claude 自动更新会覆盖已应用的修改。** 程序检测到这一情况时，会在主界面给出
-  提示并附带「重新应用」按钮，点击即可恢复，字体设置无需重新选择。
+- **补丁在时 Claude 装不上自动更新。** 原因见[代码签名的影响](#代码签名的影响)。
+  要更新 Claude，须先「还原」，待其自行完成更新后再重新应用；Clfont 检测到被拒绝
+  的更新时会在主界面提示并提供该引导流程。若通过官网重新下载安装覆盖，补丁同样
+  失效，此时主界面会提示「重新应用」，字体设置无需重新选择。
 - **实现依赖 Claude 当前的构建细节。** 字体族名称 `anthropic-sans` 与
   `anthropic-serif`、字体变量 `--font-anthropic-serif` / `--font-anthropic-sans`、
   代码字体钩子 `--font-mono-override` 与底色变量 `--cds-surface-*` 均来自远程

@@ -73,6 +73,12 @@ func cmdStatus(_ t: AppTarget) {
     if let lv = last["version"] as? String, lv != version {
         bad("补丁已失效：Claude 已更新到 \(version)（上次应用于 \(lv)），需要重新应用一次")
     }
+    // Claude 的自动更新会被我们的 ad-hoc 签名挡住，且界面上没有任何提示。
+    // 这一行是 GUI 判断「提醒用户先还原再更新」的依据，措辞改动需同步 GUI。
+    if patched, let b = UpdateBlock.blocked(since: (last["time"] as? String) ?? "") {
+        bad("Claude 更新被挡：已有 \(b.count) 次更新因签名校验失败被拒"
+            + "（最近 \(b.last)）。补丁在时装不上更新，需要先「还原」再更新 Claude")
+    }
     let fm = FileManager.default
     info("app.asar：\(fm.fileExists(atPath: t.asar.path) ? "存在" : "不存在")"
          + "，app.asar.bak（原版留底）：\(fm.fileExists(atPath: t.asarBak.path) ? "存在" : "不存在")")
@@ -191,6 +197,12 @@ func cmdDoctor(_ t: AppTarget) {
         } else {
             if isPatched(t) {
                 ok("已打补丁（asar 内检测到注入标记）")
+                // 补丁在时 Claude 装不上更新，且只写进它自己的日志，界面无提示。
+                if let b = UpdateBlock.blocked(since: Config.load().lastInstall(t)["time"] as? String ?? "") {
+                    bad("Claude 更新被挡：已有 \(b.count) 次更新因签名校验失败被拒（最近 \(b.last)）。"
+                        + "需要更新 Claude 时请先 clfont uninstall，等 Claude 自己装完更新，再重新 install")
+                    problems += 1
+                }
             } else if fm.fileExists(atPath: t.asarBak.path) {
                 bad("app.asar.bak 存在但 asar 无补丁标记（半成品状态），运行 clfont uninstall 可恢复")
                 problems += 1

@@ -100,6 +100,9 @@ class Sandbox:
             "CLFONT_CONFIG": str(self.dir / "config.json"),
             "CLFONT_BIN_DIR": str(self.dir / "bin"),
             "CLFONT_SMOKE_USER_DATA_DIR": str(self.dir / "smoke"),
+            # 指向沙箱内的空目录。不隔离的话会读到这台机器上真实的 Claude 日志，
+            # 「更新被挡」那行就随机器而变，两版实现的输出对比也不再可信。
+            "CLFONT_CLAUDE_LOG_DIR": str(self.dir / "claude-logs"),
         })
 
     def run(self, *args, expect=0, **envkw):
@@ -539,6 +542,41 @@ def test_songti_bold_falls_back_to_black():
                  if "font-weight:100 500" in f]
     for f in reg_faces:
         contains(f, 'local("STSongti-SC-Regular")', "常规仍应是 Regular")
+
+
+@test
+def test_detects_blocked_claude_updates():
+    """检测「Claude 自动更新被补丁挡住」，且不误报历史记录。
+
+    我们必须重签名，ad-hoc 签名的指定要求退化成只认当前 cdhash，而 Squirrel.Mac
+    装更新前会拿运行中 app 的指定要求去校验下载来的新版——新版 cdhash 必然不同，
+    每次都失败。失败只写进 Claude 自己的日志，界面上没有任何提示，用户会被静默卡
+    在旧版（2026-10 实测有人卡了近三周、666 次）。status 必须把它说出来。
+
+    同样重要的是**不能误报**：还原并更新过的机器，日志里仍留着上一轮补丁期间的
+    失败记录，按时间过滤掉才行，否则每个老用户一打开就看到假警报。"""
+    sb = Sandbox()
+    try:
+        logs = sb.dir / "claude-logs"
+        logs.mkdir(parents=True, exist_ok=True)
+        err = ("Auto-update error: [Error: Code signature at URL file:///x/Claude.app/ "
+               "did not pass validation: code failed to satisfy specified code requirement(s)]")
+        # 远早于任何一次 install 的历史记录
+        (logs / "main1.log").write_text(f"2020-01-01 00:00:00 [error] [updater] {err}\n")
+        _, out = sb.run("status")
+        ok("Claude 更新被挡" not in out, "未打补丁时不该报更新被挡")
+
+        sb.run("install", "--yes", "--scope", "cjk")
+        _, out = sb.run("status")
+        ok("Claude 更新被挡" not in out, "只有 install 之前的历史记录时不该误报")
+
+        # install 之后才发生的失败
+        (logs / "main.log").write_text(f"2099-12-31 23:59:59 [error] [updater] {err}\n")
+        _, out = sb.run("status")
+        contains(out, "Claude 更新被挡", "install 之后被挡的更新必须报出来")
+        contains(out, "2099-12-31 23:59:59", "应带上最近一次的时间")
+    finally:
+        sb.cleanup()
 
 
 @test

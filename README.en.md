@@ -219,6 +219,23 @@ signature it applies is ad-hoc. That has consequences:
   for the "Claude Safe Storage" item. The prompt can appear several times over
   (four, in testing); enter your login password and choose Always Allow each
   time. This is expected.
+- **Claude's automatic updates are refused.** Before installing an update,
+  Squirrel checks the downloaded build against the running app's designated
+  requirement. Ad-hoc signing degrades that requirement to `cdhash H"..."`, which
+  matches only this exact binary — a new build's cdhash never will, so the check
+  fails every time. The failure is written only to Claude's own log and never
+  surfaces in its interface: one machine logged 666 of them in October 2026,
+  leaving its owner silently stuck on an old version for nearly three weeks.
+  Clfont reads that log, says so in the main window, and offers a guided
+  restore → update → re-apply.
+- **Device registration breaks, so Projects cannot attach a local folder.** The
+  original `keychain-access-groups` entitlement includes
+  `Q6L2SF6YDW.com.anthropic.claude.hwkey`, the access group holding the Secure
+  Enclave key used to register this machine with your account. Ad-hoc signing
+  forces that entitlement to be dropped, the key becomes unreachable, Claude's log
+  fills with `enclave key unavailable`, and the interface reports that this
+  computer is not connected to your account — which is what makes Add folder
+  fail.
 
 Every other entitlement is preserved in full. Only
 `Contents/Resources/app.asar` and `Contents/Info.plist` are modified, and both are
@@ -274,9 +291,12 @@ the other targets left behind.
 
 ## Known limits
 
-- **A Claude update overwrites what was applied.** Clfont notices and says so in
-  the main window, with a Re-apply button next to it. One click restores it, and
-  nothing you chose has to be chosen again.
+- **While the patch is in place, Claude cannot install its own updates.** See
+  [What re-signing costs you](#what-re-signing-costs-you). To update Claude,
+  restore first, let it update itself, then apply again; when Clfont spots a
+  refused update it says so in the main window and offers that flow. Reinstalling
+  over the top from the website also removes the patch, and in that case the main
+  window offers a Re-apply button — nothing you chose has to be chosen again.
 - **The implementation rides on Claude's current build.** The family names
   `anthropic-sans` and `anthropic-serif`, the variables
   `--font-anthropic-serif` / `--font-anthropic-sans`, the code font hook

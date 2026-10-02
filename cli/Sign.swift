@@ -111,6 +111,22 @@ enum Sign {
     }
 
     /// 只重签顶层 bundle，并带回原版 entitlements。
+    ///
+    /// **刻意不带 `-r`。** ad-hoc 签名的隐式指定要求是 `cdhash H"..."`，只认这一份
+    /// 二进制。Squirrel.Mac 装更新前会拿运行中 app 的指定要求去校验下载来的新版，
+    /// 新版 cdhash 必然不同，于是 Claude 的自动更新被彻底挡住，界面上还没有任何
+    /// 提示（2026-10-01 在一台机器上实测到 666 次 did not pass validation，用户被
+    /// 静默卡在旧版近三周）。
+    ///
+    /// 看上去只要 `-r` 写回原版那条指定要求就能修好——**实测过，不行**：
+    ///   · 更新那半确实修好了：隔离实验台上，不带 -r 得到 did not pass validation，
+    ///     带 -r 得到 Update downloaded and ready to install。
+    ///   · 但钥匙串那半垮了：钥匙串 ACL 按 app 声明的指定要求评估访问者。声明成
+    ///     Anthropic 那条，而我们是 ad-hoc 签名、永远满足不了，于是「始终允许」
+    ///     存进去也不生效，**每次启动 Claude 都要重新输登录密码**。
+    ///     正式机实测对照：cdhash 要求下重启不再弹；原版要求下重启必弹。
+    /// 每次启动输密码比静默卡更新更难受，因此保持现状，改为检测并引导用户
+    /// 「还原 → 更新 Claude → 重新应用」。
     static func resign(_ t: AppTarget) throws {
         let ent = entitlementsForResign(t)
         info("重签名顶层 bundle（"
@@ -121,7 +137,16 @@ enum Sign {
         cmd.append(t.app.path)
         let r = run(cmd)
         if r.code != 0 { throw CLIError("codesign 失败：\(r.out)") }
-        guard valid(t) else { throw CLIError("codesign -v 验证未通过") }
+        // 验证失败时把 codesign 自己的说法带出来。只说「验证未通过」的话，
+        // 用户和维护者都无从下手——成因可能是磁盘写满、app 在只读卷上、
+        // 残留的 Helper 进程占着文件、扩展属性异常等，彼此处理方式完全不同。
+        guard valid(t) else {
+            let detail = run(["/usr/bin/codesign", "-v", "--verbose=4", t.app.path]).out
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            throw CLIError("codesign -v 验证未通过"
+                           + (detail.isEmpty ? "" : "\n    codesign 的说明：\n    "
+                              + detail.replacingOccurrences(of: "\n", with: "\n    ")))
+        }
         ok("签名验证通过")
     }
 }
