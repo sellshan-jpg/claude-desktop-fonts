@@ -111,6 +111,11 @@ Everything Clfont does happens on your own Mac:
   Releases endpoint (`api.github.com`) when checking for updates; it carries
   nothing about your machine, and the automatic check can be turned off under
   About.
+- **One file of Claude's is read, and nothing else.** To detect refused updates,
+  Clfont reads `~/Library/Logs/Claude/main*.log`, matching only the phrase
+  `did not pass validation` and the timestamp at the start of the line. The rest
+  is not parsed, nothing is written back, and nothing is uploaded. That file is
+  the application's own diagnostic log and holds no conversation content.
 - **Everything is undoable.** A full backup of the app is taken before anything
   changes. If a step fails or you cancel partway, the files go back to what they
   were and the signature is verified again. To bring back Anthropic's original
@@ -118,8 +123,8 @@ Everything Clfont does happens on your own Mac:
   backup matches the current version.
 
 All of this is checkable in the source: the injected CSS is produced by
-`build_css` in `clfont`, and `build_preload_injection` in the same file shows how
-it gets written.
+`build_css` in `clfont`, `build_preload_injection` in the same file shows how it
+gets written, and the log reading lives in `cli/UpdateBlock.swift`.
 
 Worth stating plainly: this tool works by modifying an app bundle, which may not
 sit well with Claude's terms of use. The author makes no warranty about any
