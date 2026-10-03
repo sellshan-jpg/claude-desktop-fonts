@@ -116,6 +116,13 @@ Everything Clfont does happens on your own Mac:
   `did not pass validation` and the timestamp at the start of the line. The rest
   is not parsed, nothing is written back, and nothing is uploaded. That file is
   the application's own diagnostic log and holds no conversation content.
+- **Nothing runs in the background by default.** Closing the window quits the
+  app outright. The About window carries one switch, off by default — notify me
+  when updates are refused. Turning it on installs a LaunchAgent that wakes the
+  app every four hours with no window and no Dock icon, reads Claude's log once,
+  posts a notification if warranted, and exits immediately. Turning it off
+  unloads and deletes that LaunchAgent, leaving nothing behind. None of this
+  touches the network.
 - **Everything is undoable.** A full backup of the app is taken before anything
   changes. If a step fails or you cancel partway, the files go back to what they
   were and the signature is verified again. To bring back Anthropic's original

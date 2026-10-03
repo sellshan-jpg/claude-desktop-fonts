@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UserNotifications
 
 // clfont GUI（macOS 26）
 // 界面按 design_handoff_clfont_ui/README.md 的方案 1a 实现。
@@ -105,6 +106,10 @@ final class Copy: ObservableObject {
         "sheet.apply.c2": "Projects 中的「添加本地文件夹」（该功能依赖设备注册）",
         "sheet.apply.c3": "Claude 的自动更新将被拒绝，更新前需先执行「还原」",
         "sheet.apply.undo": "以上均源于重新签名，执行「还原」即可全部恢复。",
+        "notify.title": "Claude 的更新无法安装",
+        "notify.body": "补丁存在期间 Claude 的更新会被拒绝。打开 Clfont 执行「更新 Claude」即可。",
+        "about.watch": "更新被拒绝时提醒我",
+        "about.watch.desc": "在后台定期检查 Claude 的日志，需要通知权限。关闭后不留任何后台程序。",
         "blocked.title": "Claude 的更新无法安装",
         "blocked.body": "应用字体需为 Claude 重新签名，而 Claude 的更新程序仅接受带有原始签名的新版本，因此补丁存在期间更新将被拒绝，且 Claude 不会就此给出任何提示。如需更新 Claude，请先执行还原，待其完成更新后重新应用字体设置。",
         "blocked.action": "更新 Claude",
@@ -361,6 +366,10 @@ final class Copy: ObservableObject {
         "sheet.apply.c2": "Attaching a local folder in Projects, which relies on device registration",
         "sheet.apply.c3": "Claude's automatic updates are refused; restore before updating",
         "sheet.apply.undo": "All three come from re-signing, and Restore brings them back.",
+        "notify.title": "A Claude update cannot install",
+        "notify.body": "Updates are refused while the patch is in place. Open Clfont and run Update Claude.",
+        "about.watch": "Notify me when updates are refused",
+        "about.watch.desc": "Checks Claude's log periodically in the background; needs notification permission. Turning it off leaves nothing running.",
         "blocked.title": "A Claude update cannot install",
         "blocked.body": "Applying fonts requires re-signing Claude, and Claude's updater accepts only a new version carrying the original signature. While the patch is in place, updates are therefore refused, and Claude gives no indication of this. To update Claude, restore it first, allow the update to install, then apply your font settings again.",
         "blocked.action": "Update Claude",
@@ -3683,6 +3692,8 @@ struct UpdateCheckButton: View {
 struct AboutView: View {
     /// 只为让开关能刷新界面；实际读写走 UserDefaults
     @AppStorage("autoCheckUpdates") private var autoCheck = true
+    /// 以 LaunchAgent 是否存在为准，不另存一份状态——用户手工删掉 plist 时界面要跟上
+    @State private var watchOn = Watcher.installed
     @ObservedObject private var copy = Copy.shared
 
     var body: some View {
@@ -3726,6 +3737,33 @@ struct AboutView: View {
                 Toggle(t("update.auto"), isOn: $autoCheck)
                     .toggleStyle(.switch).controlSize(.small)
                     .font(.system(size: 12.5))
+                    .frame(maxWidth: .infinity)
+
+                // 这个开关会装/卸一个 LaunchAgent。默认关：Clfont 一向是关窗即退，
+                // 不该擅自在用户机器上留常驻成分，要留也得他自己点。
+                VStack(alignment: .leading, spacing: 3) {
+                    Toggle(t("about.watch"), isOn: $watchOn)
+                        .toggleStyle(.switch).controlSize(.small)
+                        .font(.system(size: 12.5))
+                        .frame(maxWidth: .infinity)
+                        .onChange(of: watchOn) { _, on in
+                            if on {
+                                UNUserNotificationCenter.current()
+                                    .requestAuthorization(options: [.alert]) { granted, _ in
+                                        DispatchQueue.main.async {
+                                            if granted { Watcher.install() } else { watchOn = false }
+                                        }
+                                    }
+                            } else {
+                                Watcher.remove()
+                            }
+                        }
+                    Text(t("about.watch.desc"))
+                        .font(.system(size: 11)).foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                // 撑满宽度，否则这组会收缩到内容宽度，开关跟上一行的对不齐
+                .frame(maxWidth: .infinity)
 
                 UpdateCheckButton(fullWidth: true)
             }
@@ -3749,7 +3787,110 @@ private struct AboutCommand: View {
     }
 }
 
+/// 后台提醒：装一个 LaunchAgent，每 4 小时用 --watch 把本程序唤起一次，查完就退。
+///
+/// 为什么非得这么做：Clfont 关窗即退，不在运行的程序发不出通知。而「Claude 的更新
+/// 被补丁挡住」恰恰是用户不开 Clfont 就不会知道的事——这正是我们只修了一半的那个
+/// 静默故障。默认不装，用户在「关于」里打开才装。
+enum Watcher {
+    static let label = "com.clfont.watch"
+    static var plist: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/LaunchAgents/\(label).plist")
+    }
+    static var installed: Bool { FileManager.default.fileExists(atPath: plist.path) }
+
+    static func install() {
+        let exe = Bundle.main.executablePath ?? ""
+        guard !exe.isEmpty else { return }
+        let dict: [String: Any] = [
+            "Label": label,
+            "ProgramArguments": [exe, "--watch"],
+            // 4 小时一次。Claude 自己每小时查一次更新，被挡的记录很快就会落进日志；
+            // 再密就只是徒增唤起次数，对用户没有额外价值。
+            "StartInterval": 14400,
+            "RunAtLoad": true,
+        ]
+        try? FileManager.default.createDirectory(
+            at: plist.deletingLastPathComponent(), withIntermediateDirectories: true)
+        guard let d = try? PropertyListSerialization.data(
+            fromPropertyList: dict, format: .xml, options: 0) else { return }
+        try? d.write(to: plist)
+        launchctl(["bootout", "gui/\(getuid())/\(label)"])        // 先卸旧的，忽略失败
+        launchctl(["bootstrap", "gui/\(getuid())", plist.path])
+    }
+
+    static func remove() {
+        launchctl(["bootout", "gui/\(getuid())/\(label)"])
+        try? FileManager.default.removeItem(at: plist)
+    }
+
+    @discardableResult
+    private static func launchctl(_ args: [String]) -> Int32 {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+        p.arguments = args
+        p.standardOutput = FileHandle.nullDevice
+        p.standardError = FileHandle.nullDevice
+        try? p.run(); p.waitUntilExit()
+        return p.terminationStatus
+    }
+}
+
+/// --watch：不开窗口、不进 Dock，跑一次检查，必要时发通知，然后退出。
+enum WatchMode {
+    private static let kLastNotified = "watchLastNotified"
+    /// 同一件事最多一天提醒一次。被挡的更新每小时都会往日志里再写一条，
+    /// 不节流的话每次唤起都会弹，变成骚扰。
+    private static let throttle: TimeInterval = 24 * 3600
+
+    static func run() {
+        let app = NSApplication.shared
+        app.setActivationPolicy(.accessory)
+        guard blocked() else { exit(0) }
+        let d = UserDefaults.standard
+        guard Date().timeIntervalSince1970 - d.double(forKey: kLastNotified) > throttle else { exit(0) }
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { st in
+            // 没授权就什么都不做：授权要在「关于」里由用户主动打开时申请，
+            // 后台悄悄弹权限请求是更糟的打扰。
+            guard st.authorizationStatus == .authorized else { exit(0) }
+            let c = UNMutableNotificationContent()
+            c.title = t("notify.title")
+            c.body = t("notify.body")
+            center.add(UNNotificationRequest(identifier: UUID().uuidString, content: c, trigger: nil)) { _ in
+                d.set(Date().timeIntervalSince1970, forKey: kLastNotified)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) { exit(0) }
+            }
+        }
+        // 兜底：无论如何 15 秒后退出，绝不留后台进程
+        DispatchQueue.main.asyncAfter(deadline: .now() + 15) { exit(0) }
+        app.run()
+    }
+
+    /// 复用 CLI 的 status：检测逻辑只有一份，GUI 和后台看到的结论必然一致。
+    private static func blocked() -> Bool {
+        guard let cli = Bundle.main.path(forResource: "clfont", ofType: nil) else { return false }
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: cli)
+        p.arguments = ["status"]
+        let pipe = Pipe()
+        p.standardOutput = pipe; p.standardError = pipe
+        guard (try? p.run()) != nil else { return false }
+        let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        p.waitUntilExit()
+        return out.contains(CLIMarker.updateBlocked)
+    }
+}
+
 @main
+enum Entry {
+    static func main() {
+        if CommandLine.arguments.contains("--watch") { WatchMode.run(); return }
+        ClfontApp.main()
+    }
+}
+
 struct ClfontApp: App {
     var body: some Scene {
         WindowGroup("Clfont") { ContentView() }
